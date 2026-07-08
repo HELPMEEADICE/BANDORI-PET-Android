@@ -247,16 +247,59 @@ local width = 1
 local height = 1
 local groups = {}
 local group_index = 1
+local default_group = nil
+local active_motion_kind = nil
+local model_is_moc3 = false
 local offset_x = 0
 local offset_y = 0
 local scale = 1
+
+local ACTION_GROUP_ORDER = {
+    "tap_body", "tap_head", "angry01", "bye01", "kime01", "smile01", "nf01", "nnf01",
+}
 
 local function ends_with(value, suffix)
     return value:sub(-#suffix) == suffix
 end
 
+local function is_idle_group(name)
+    return string.find(string.lower(tostring(name or "")), "idle", 1, true) ~= nil
+end
+
+local function choose_default_group(names)
+    local fallback = nil
+    for _, name in ipairs(names) do
+        local lower = string.lower(tostring(name))
+        if lower == "idle" or lower == "idle01" then return name end
+        if fallback == nil and is_idle_group(name) then fallback = name end
+    end
+    return fallback
+end
+
+local function append_action_group(target, name, seen)
+    if name == nil or is_idle_group(name) or seen[name] then return end
+    seen[name] = true
+    target[#target + 1] = name
+end
+
+local function build_action_groups(names)
+    local by_name = {}
+    for _, name in ipairs(names) do by_name[name] = true end
+
+    local result = {}
+    local seen = {}
+    for _, preferred in ipairs(ACTION_GROUP_ORDER) do
+        if by_name[preferred] then append_action_group(result, preferred, seen) end
+    end
+
+    table.sort(names, function(a, b) return tostring(a) < tostring(b) end)
+    for _, name in ipairs(names) do append_action_group(result, name, seen) end
+    return result
+end
+
 local function collect_moc3_groups()
     groups = {}
+    default_group = nil
     local motions = {}
     if renderer.model_info then
         motions = renderer:model_info().motions or {}
@@ -264,24 +307,82 @@ local function collect_moc3_groups()
         local refs = renderer:get_model_data() and renderer:get_model_data().file_references
         motions = (refs and refs.motions) or {}
     end
+    local names = {}
     for name, _ in pairs(motions) do
-        if not string.find(string.lower(name), "idle") then groups[#groups + 1] = name end
+        names[#names + 1] = name
     end
+    default_group = choose_default_group(names)
+    groups = build_action_groups(names)
 end
 
 local function collect_moc_groups()
-    groups = {"tap_body", "tap_head", "angry01", "bye01", "kime01", "smile01", "nf01", "nnf01"}
+    groups = {}
+    default_group = nil
+    local names = {}
+    local model = renderer.get_model and renderer:get_model() or nil
+    local model_setting = model and model.modelSetting or nil
+    if model_setting and model_setting.getMotionNames then
+        names = model_setting:getMotionNames() or {}
+    end
+    default_group = choose_default_group(names)
+    groups = build_action_groups(names)
+    if #groups == 0 then
+        groups = {"tap_body", "tap_head", "angry01", "bye01", "kime01", "smile01", "nf01", "nnf01"}
+    end
+end
+
+local function is_motion_finished()
+    if not renderer then return true end
+    if renderer.is_motion_finished then return renderer:is_motion_finished() end
+    local model = renderer.get_model and renderer:get_model() or nil
+    local manager = model and model.mainMotionManager or nil
+    return manager == nil or manager:isFinished()
+end
+
+local function start_motion(group, loop, priority)
+    if not renderer or group == nil then return false end
+    if model_is_moc3 then
+        renderer:start_motion(group, 0, priority, loop)
+        return true
+    end
+
+    local model = renderer.get_model and renderer:get_model() or nil
+    if model and model.modelSetting and model.modelSetting.getMotionFile then
+        local file = model.modelSetting:getMotionFile(group, 0)
+        if file == nil or file == "" then return false end
+        model:StartMotion(group, 0, priority or 3)
+        local motion = model.motions and model.motions[tostring(group) .. "#0"] or nil
+        if motion ~= nil then motion.loop = loop == true end
+        return true
+    end
+
+    renderer:start_motion(group, 0, priority)
+    return true
+end
+
+local function start_default_motion()
+    if default_group == nil then
+        if renderer and renderer.clear_motions then renderer:clear_motions() end
+        active_motion_kind = nil
+        return
+    end
+    if start_motion(default_group, true, 1) then
+        active_motion_kind = "default"
+    end
 end
 
 function __bp_load(path, w, h)
     width = w
     height = h
+    active_motion_kind = nil
     if ends_with(path, ".model3.json") then
+        model_is_moc3 = true
         local embed = require("live2d_moc3_pet_embed")
         renderer = embed.new(width, height)
         renderer:load_model(path, width, height)
         collect_moc3_groups()
     else
+        model_is_moc3 = false
         local embed = require("live2d_embed")
         renderer = embed.new(width, height)
         renderer:load_model(path, width, height, { center = false })
@@ -289,6 +390,7 @@ function __bp_load(path, w, h)
     end
     if renderer.set_offset then renderer:set_offset(offset_x, offset_y) end
     if renderer.set_scale then renderer:set_scale(scale) end
+    start_default_motion()
     return true
 end
 
@@ -303,8 +405,11 @@ function __bp_touch()
     for _ = 1, #groups do
         local group = groups[group_index]
         group_index = group_index % #groups + 1
-        local ok = pcall(function() renderer:start_motion(group, 0) end)
-        if ok then return end
+        local ok, started = pcall(function() return start_motion(group, false, 3) end)
+        if ok and started then
+            active_motion_kind = "action"
+            return
+        end
     end
 end
 
@@ -321,6 +426,9 @@ function __bp_draw(time_msec)
     if not renderer then return end
     gl.glViewport(0, 0, width, height)
     renderer:draw({ r = 0.0, g = 0.0, b = 0.0, a = 0.0, time_msec = time_msec })
+    if active_motion_kind == "action" and is_motion_finished() then
+        start_default_motion()
+    end
 end
 )lua";
     return runLua(renderer, bootstrap);
