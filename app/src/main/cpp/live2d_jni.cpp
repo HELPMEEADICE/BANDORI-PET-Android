@@ -272,10 +272,10 @@ function __bp_touch()
     end
 end
 
-function __bp_draw()
+function __bp_draw(time_msec)
     if not renderer then return end
     gl.glViewport(0, 0, width, height)
-    renderer:draw({ r = 0.0, g = 0.0, b = 0.0, a = 0.0 })
+    renderer:draw({ r = 0.0, g = 0.0, b = 0.0, a = 0.0, time_msec = time_msec })
 end
 )lua";
     return runLua(renderer, bootstrap);
@@ -314,7 +314,10 @@ static void renderLoop(Renderer* renderer) {
         }
 
         getGlobal(renderer, "__bp_draw");
-        callLua(renderer, "__bp_draw", 0);
+        const auto now = std::chrono::steady_clock::now().time_since_epoch();
+        const auto timeMs = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+        renderer->luaApi.pushNumber(renderer->lua, static_cast<double>(timeMs));
+        callLua(renderer, "__bp_draw", 1);
         eglSwapBuffers(renderer->display, renderer->surface);
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
