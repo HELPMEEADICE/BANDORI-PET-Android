@@ -405,7 +405,8 @@ private fun SelectionWindow(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp)),
                 content = content,
             )
         }
@@ -422,12 +423,14 @@ private fun ImageCard(
     aspectRatio: Float,
     onClick: () -> Unit,
 ) {
+    val shape = RoundedCornerShape(22.dp)
     Card(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
+            .clip(shape)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(22.dp),
+        shape = shape,
         border = if (selected) {
             BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
         } else {
@@ -480,12 +483,14 @@ private fun TextCard(
     showMoc3Badge: Boolean,
     onClick: () -> Unit,
 ) {
+    val shape = RoundedCornerShape(22.dp)
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(82.dp)
+            .clip(shape)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(22.dp),
+        shape = shape,
         border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
