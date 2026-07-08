@@ -6,10 +6,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,9 +49,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -114,7 +119,7 @@ private fun BandoriPetApp() {
                             NavigationBarItem(
                                 selected = selectedScreen == screen,
                                 onClick = { selectedScreen = screen },
-                                icon = { NavIcon(screen.title, selectedScreen == screen) },
+                                icon = { NavIcon(screen, selectedScreen == screen) },
                                 label = { Text(screen.title, fontWeight = FontWeight.Bold) },
                             )
                         }
@@ -263,75 +268,87 @@ private fun ModelScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SelectionSummary(
-            band = selectedBand,
-            character = selectedCharacter,
-            selectedModel = selectedModel,
-        )
-
-        SectionHeader("选择乐队", "滑动选择乐队，角色列表会同步更新")
-        LazyRow(
+        SelectionWindow(
+            title = "选择乐队",
+            subtitle = "滑动选择乐队，角色列表会同步更新",
             modifier = Modifier
                 .fillMaxWidth()
-                .height(104.dp),
-            contentPadding = PaddingValues(horizontal = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .height(156.dp),
         ) {
-            items(data.bands.size, key = { data.bands[it].id }) { index ->
-                val band = data.bands[index]
-                ImageCard(
-                    modifier = Modifier.width(186.dp),
-                    title = band.display,
-                    imagePath = band.logo,
-                    selected = band.id == selectedBand.id,
-                    aspectRatio = 1.8f,
-                    onClick = { onBandSelected(band) },
-                )
+            LazyRow(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(data.bands.size, key = { data.bands[it].id }) { index ->
+                    val band = data.bands[index]
+                    ImageCard(
+                        modifier = Modifier.width(186.dp),
+                        title = band.display,
+                        imagePath = band.logo,
+                        selected = band.id == selectedBand.id,
+                        aspectRatio = 1.8f,
+                        onClick = { onBandSelected(band) },
+                    )
+                }
             }
         }
 
-        SectionHeader("选择角色", selectedBand.display)
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(118.dp),
+        SelectionWindow(
+            title = "选择角色",
+            subtitle = selectedBand.display,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            contentPadding = PaddingValues(bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(characters, key = { it.id }) { character ->
-                ImageCard(
-                    title = character.display,
-                    subtitle = selectedBand.display,
-                    imagePath = "models/${character.id}/character.png",
-                    selected = character.id == selectedCharacterId,
-                    aspectRatio = 0.82f,
-                    onClick = { onCharacterSelected(character) },
-                )
-            }
-        }
-
-        SectionHeader("选择服装", selectedCharacter?.display?.let { "选择${it}的服装" } ?: "当前角色")
-        if (availableModels.isEmpty()) {
-            EmptyMessage("该角色暂无本地模型", "请把模型放到 models/{角色名}/{服装名}/ 下。")
-        } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(156.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.72f),
-                contentPadding = PaddingValues(bottom = 8.dp),
+                columns = GridCells.Adaptive(118.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(availableModels, key = { it.modelAssetPath }) { model ->
-                    TextCard(
-                        title = model.costumeName,
-                        subtitle = model.costumeId,
-                        selected = selectedModel?.modelAssetPath == model.modelAssetPath,
-                        onClick = { onModelSelected(model) },
+                items(characters, key = { it.id }) { character ->
+                    ImageCard(
+                        title = character.display,
+                        subtitle = selectedBand.display,
+                        imagePath = "models/${character.id}/character.png",
+                        selected = character.id == selectedCharacterId,
+                        aspectRatio = 0.82f,
+                        onClick = { onCharacterSelected(character) },
                     )
+                }
+            }
+        }
+
+        SelectionWindow(
+            title = "选择服装",
+            subtitle = selectedCharacter?.display?.let { "选择${it}的服装" } ?: "当前角色",
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(0.9f),
+        ) {
+            if (availableModels.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyMessage("该角色暂无本地模型", "请把模型放到 models/{角色名}/{服装名}/ 下。")
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(156.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(availableModels, key = { it.modelAssetPath }) { model ->
+                        TextCard(
+                            title = model.costumeName,
+                            subtitle = model.costumeId,
+                            selected = selectedModel?.modelAssetPath == model.modelAssetPath,
+                            showMoc3Badge = model.isMoc3,
+                            onClick = { onModelSelected(model) },
+                        )
+                    }
                 }
             }
         }
@@ -352,57 +369,44 @@ private fun SettingsScreen(selectedModel: ModelChoice?) {
 }
 
 @Composable
-private fun SelectionSummary(band: Band, character: CharacterInfo?, selectedModel: ModelChoice?) {
+private fun SelectionWindow(
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(26.dp),
+        modifier = modifier,
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp),
         ) {
-            Text(
-                text = "当前选择",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = listOfNotNull(band.display, character?.display, selectedModel?.costumeName)
-                    .joinToString(" · ")
-                    .ifBlank { "请选择角色和服装" },
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = selectedModel?.modelAssetPath ?: "点击卡片即可切换模型",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String, subtitle: String? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        subtitle?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                content = content,
             )
         }
     }
@@ -464,29 +468,18 @@ private fun ImageCard(
                     }
                 }
             }
-            if (selected) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                ) {
-                    Text(
-                        text = "当前",
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
         }
     }
 }
 
 @Composable
-private fun TextCard(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+private fun TextCard(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    showMoc3Badge: Boolean,
+    onClick: () -> Unit,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -502,22 +495,28 @@ private fun TextCard(title: String, subtitle: String, selected: Boolean, onClick
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(horizontal = 14.dp),
+                    .padding(start = 14.dp, end = if (showMoc3Badge) 70.dp else 14.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (selected) {
-                Text(
-                    text = "当前",
+            if (showMoc3Badge) {
+                Surface(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 14.dp, bottom = 10.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Text(
+                        text = "MOC3",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }
@@ -546,22 +545,51 @@ private fun EmptyMessage(title: String, body: String) {
 }
 
 @Composable
-private fun NavIcon(title: String, selected: Boolean) {
+private fun NavIcon(screen: Screen, selected: Boolean) {
     Surface(
         modifier = Modifier.size(28.dp),
         shape = RoundedCornerShape(999.dp),
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = title.take(1),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Black,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        val iconColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp),
+        ) {
+            when (screen) {
+                Screen.Live2D -> {
+                    drawCircle(iconColor, radius = size.minDimension * 0.26f, center = Offset(size.width * 0.5f, size.height * 0.32f))
+                    drawRoundRect(
+                        color = iconColor,
+                        topLeft = Offset(size.width * 0.18f, size.height * 0.58f),
+                        size = Size(size.width * 0.64f, size.height * 0.34f),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.width * 0.18f, size.height * 0.18f),
+                    )
+                }
+                Screen.Model -> {
+                    val stroke = Stroke(width = 2.4.dp.toPx())
+                    drawRoundRect(iconColor, size = size, cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()), style = stroke)
+                    drawCircle(iconColor, radius = size.minDimension * 0.16f, center = Offset(size.width * 0.5f, size.height * 0.48f))
+                    drawLine(iconColor, Offset(size.width * 0.5f, 0f), Offset(size.width * 0.5f, size.height * 0.2f), strokeWidth = 2.2.dp.toPx())
+                    drawLine(iconColor, Offset(size.width * 0.5f, size.height * 0.8f), Offset(size.width * 0.5f, size.height), strokeWidth = 2.2.dp.toPx())
+                }
+                Screen.Settings -> {
+                    val stroke = Stroke(width = 2.2.dp.toPx())
+                    drawCircle(iconColor, radius = size.minDimension * 0.34f, style = stroke)
+                    drawCircle(iconColor, radius = size.minDimension * 0.11f)
+                    drawLine(iconColor, Offset(size.width * 0.5f, 0f), Offset(size.width * 0.5f, size.height * 0.2f), strokeWidth = 2.2.dp.toPx())
+                    drawLine(iconColor, Offset(size.width * 0.5f, size.height * 0.8f), Offset(size.width * 0.5f, size.height), strokeWidth = 2.2.dp.toPx())
+                    drawLine(iconColor, Offset(0f, size.height * 0.5f), Offset(size.width * 0.2f, size.height * 0.5f), strokeWidth = 2.2.dp.toPx())
+                    drawLine(iconColor, Offset(size.width * 0.8f, size.height * 0.5f), Offset(size.width, size.height * 0.5f), strokeWidth = 2.2.dp.toPx())
+                }
+            }
         }
     }
 }
+
+private val ModelChoice.isMoc3: Boolean
+    get() = modelAssetPath.endsWith(".model3.json") || modelAssetPath.contains("moc3", ignoreCase = true)
 
 @Composable
 private fun AssetImage(path: String?, modifier: Modifier, contentScale: ContentScale, placeholderText: String? = null) {
