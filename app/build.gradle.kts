@@ -18,7 +18,7 @@ android {
         versionName = "0.1.0"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
 
         externalNativeBuild {
@@ -44,6 +44,14 @@ android {
     sourceSets["main"].assets.srcDir(generatedAssetsDir)
     sourceSets["main"].res.srcDir(generatedResDir)
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -60,6 +68,8 @@ val syncLive2DAssets by tasks.registering(Sync::class) {
     from(rootProject.file("third_party/Live2D-v2-Lua")) {
         into("third_party/Live2D-v2-Lua")
         exclude("**/.git/**")
+        exclude("**/venv/**")
+        exclude("**/frames_output/**")
     }
 }
 
