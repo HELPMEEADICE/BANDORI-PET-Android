@@ -11,12 +11,16 @@
 #include <string>
 #include <thread>
 
-#ifndef EGL_OPENGL_API
-#define EGL_OPENGL_API 0x30A2
+#ifndef EGL_OPENGL_ES_API
+#define EGL_OPENGL_ES_API 0x30A0
 #endif
 
-#ifndef EGL_OPENGL_BIT
-#define EGL_OPENGL_BIT 0x0008
+#ifndef EGL_OPENGL_ES2_BIT
+#define EGL_OPENGL_ES2_BIT 0x0004
+#endif
+
+#ifndef EGL_CONTEXT_CLIENT_VERSION
+#define EGL_CONTEXT_CLIENT_VERSION 0x3098
 #endif
 
 #ifndef EGL_CONTEXT_MAJOR_VERSION_KHR
@@ -154,13 +158,13 @@ static bool initEgl(Renderer* renderer) {
         setError(renderer, "EGL 初始化失败");
         return false;
     }
-    if (eglBindAPI(EGL_OPENGL_API) != EGL_TRUE) {
-        setError(renderer, "当前 EGL 不支持桌面 OpenGL API；请提供 Mesa/Zink 的 libEGL/libGL");
+    if (eglBindAPI(EGL_OPENGL_ES_API) != EGL_TRUE) {
+        setError(renderer, "当前 EGL 不支持 OpenGL ES API");
         return false;
     }
 
     const EGLint configAttribs[] = {
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
@@ -172,7 +176,7 @@ static bool initEgl(Renderer* renderer) {
     EGLConfig config = nullptr;
     EGLint configCount = 0;
     if (eglChooseConfig(renderer->display, configAttribs, &config, 1, &configCount) != EGL_TRUE || configCount == 0) {
-        setError(renderer, "找不到支持 OpenGL/Zink 的 EGLConfig");
+        setError(renderer, "找不到支持 OpenGL ES 2.0 的 EGLConfig");
         return false;
     }
 
@@ -182,13 +186,10 @@ static bool initEgl(Renderer* renderer) {
         return false;
     }
 
-    const EGLint contextAttribs[] = {EGL_CONTEXT_MAJOR_VERSION_KHR, 2, EGL_CONTEXT_MINOR_VERSION_KHR, 1, EGL_NONE};
+    const EGLint contextAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
     renderer->context = eglCreateContext(renderer->display, config, EGL_NO_CONTEXT, contextAttribs);
-    if (renderer->context == EGL_NO_CONTEXT) {
-        renderer->context = eglCreateContext(renderer->display, config, EGL_NO_CONTEXT, nullptr);
-    }
     if (renderer->context == EGL_NO_CONTEXT || eglMakeCurrent(renderer->display, renderer->surface, renderer->surface, renderer->context) != EGL_TRUE) {
-        setError(renderer, "OpenGL 上下文创建失败");
+        setError(renderer, "OpenGL ES 上下文创建失败");
         return false;
     }
     return true;

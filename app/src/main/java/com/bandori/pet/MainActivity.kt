@@ -331,8 +331,8 @@ private fun SettingsScreen(selectedModel: ModelChoice?) {
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        InfoCard("渲染核心", "Live2D-v2-Lua + LuaJIT，通过 JNI 建立 EGL OpenGL 上下文。moc 使用 live2d_embed.lua，moc3/model3 使用 live2d_moc3_embed.lua。")
-        InfoCard("Zink 要求", "运行设备或打包产物需要提供 Mesa/Zink 可用的 libEGL/libGL/libvulkan 以及 app/src/main/jniLibs/<abi>/libluajit.so。当前实现不会降级到 GLES。")
+        InfoCard("渲染核心", "Live2D-v2-Lua + LuaJIT，通过 JNI 建立 Android EGL/OpenGL ES 2.0 上下文。moc 使用 live2d_embed.lua，moc3/model3 使用 live2d_moc3_embed.lua。")
+        InfoCard("运行要求", "运行设备需要支持 OpenGL ES 2.0，并在 app/src/main/jniLibs/<abi>/ 提供 libluajit.so。")
         InfoCard("当前模型", selectedModel?.modelAssetPath ?: "未选择")
         InfoCard("关于", "Bandori Pet Android，原生 Material Design 3 风格。点击 Live2D 展示框会轮换触发模型动作。")
     }
