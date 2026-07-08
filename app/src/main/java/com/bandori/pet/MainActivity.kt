@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -45,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -105,13 +109,13 @@ private fun BandoriPetApp() {
         } else {
             Scaffold(
                 bottomBar = {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                         Screen.entries.forEach { screen ->
                             NavigationBarItem(
                                 selected = selectedScreen == screen,
                                 onClick = { selectedScreen = screen },
-                                icon = { NavTile(screen.title, selectedScreen == screen) },
-                                label = null,
+                                icon = { NavIcon(screen.title, selectedScreen == screen) },
+                                label = { Text(screen.title, fontWeight = FontWeight.Bold) },
                             )
                         }
                     }
@@ -166,7 +170,7 @@ private fun Header(selectedModel: ModelChoice?) {
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = selectedModel?.title ?: "请选择模型",
+            text = selectedModel?.title ?: "选择你的 Live2D 模型",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -255,20 +259,28 @@ private fun ModelScreen(
         selectedCharacter?.let { repository.availableModels(it) }.orEmpty()
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text("选择乐队", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(150.dp),
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SelectionSummary(
+            band = selectedBand,
+            character = selectedCharacter,
+            selectedModel = selectedModel,
+        )
+
+        SectionHeader("选择乐队", "滑动选择乐队，角色列表会同步更新")
+        LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.32f),
-            contentPadding = PaddingValues(bottom = 8.dp),
+                .height(104.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(data.bands, key = { it.id }) { band ->
+            items(data.bands.size, key = { data.bands[it].id }) { index ->
+                val band = data.bands[index]
                 ImageCard(
+                    modifier = Modifier.width(186.dp),
                     title = band.display,
                     imagePath = band.logo,
                     selected = band.id == selectedBand.id,
@@ -278,37 +290,38 @@ private fun ModelScreen(
             }
         }
 
-        Text("选择角色", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
+        SectionHeader("选择角色", selectedBand.display)
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(112.dp),
+            columns = GridCells.Adaptive(118.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.34f),
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(characters, key = { it.id }) { character ->
                 ImageCard(
                     title = character.display,
+                    subtitle = selectedBand.display,
                     imagePath = "models/${character.id}/character.png",
                     selected = character.id == selectedCharacterId,
-                    aspectRatio = 0.86f,
+                    aspectRatio = 0.82f,
                     onClick = { onCharacterSelected(character) },
                 )
             }
         }
 
-        Text("选择服装", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
+        SectionHeader("选择服装", selectedCharacter?.display?.let { "选择${it}的服装" } ?: "当前角色")
         if (availableModels.isEmpty()) {
             EmptyMessage("该角色暂无本地模型", "请把模型放到 models/{角色名}/{服装名}/ 下。")
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(140.dp),
+                columns = GridCells.Adaptive(156.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.34f),
+                    .weight(0.72f),
+                contentPadding = PaddingValues(bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -339,36 +352,134 @@ private fun SettingsScreen(selectedModel: ModelChoice?) {
 }
 
 @Composable
+private fun SelectionSummary(band: Band, character: CharacterInfo?, selectedModel: ModelChoice?) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "当前选择",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = listOfNotNull(band.display, character?.display, selectedModel?.costumeName)
+                    .joinToString(" · ")
+                    .ifBlank { "请选择角色和服装" },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = selectedModel?.modelAssetPath ?: "点击卡片即可切换模型",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        subtitle?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
 private fun ImageCard(
+    modifier: Modifier = Modifier,
     title: String,
+    subtitle: String? = null,
     imagePath: String?,
     selected: Boolean,
     aspectRatio: Float,
     onClick: () -> Unit,
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp),
-        border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+        border = if (selected) {
+            BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        },
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            },
+        ),
     ) {
         Box(Modifier.fillMaxSize()) {
             AssetImage(
                 path = imagePath,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
+                placeholderText = title,
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.58f))))
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.64f))))
                     .padding(10.dp),
             ) {
-                Text(title, color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    subtitle?.let {
+                        Text(
+                            text = it,
+                            color = Color.White.copy(alpha = 0.72f),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            if (selected) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Text(
+                        text = "当前",
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }
@@ -379,15 +490,35 @@ private fun TextCard(title: String, subtitle: String, selected: Boolean, onClick
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(86.dp)
+            .height(82.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp),
-        border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.Center) {
-            Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(horizontal = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (selected) {
+                Text(
+                    text = "当前",
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 14.dp, bottom = 10.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
@@ -415,20 +546,25 @@ private fun EmptyMessage(title: String, body: String) {
 }
 
 @Composable
-private fun NavTile(title: String, selected: Boolean) {
+private fun NavIcon(title: String, selected: Boolean) {
     Surface(
-        modifier = Modifier.size(width = 92.dp, height = 44.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.size(28.dp),
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(title, fontWeight = FontWeight.Bold, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = title.take(1),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Black,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
 
 @Composable
-private fun AssetImage(path: String?, modifier: Modifier, contentScale: ContentScale) {
+private fun AssetImage(path: String?, modifier: Modifier, contentScale: ContentScale, placeholderText: String? = null) {
     val context = LocalContext.current
     val bitmap = remember(path) {
         path?.let {
@@ -443,12 +579,21 @@ private fun AssetImage(path: String?, modifier: Modifier, contentScale: ContentS
         Box(
             modifier = modifier.background(
                 Brush.linearGradient(
-                    listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.secondaryContainer),
+                    listOf(
+                        MaterialTheme.colorScheme.primaryContainer,
+                        MaterialTheme.colorScheme.tertiaryContainer,
+                        MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ),
                 ),
             ),
             contentAlignment = Alignment.Center,
         ) {
-            Text("No Image", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Text(
+                text = placeholderText?.take(1)?.uppercase() ?: "BP",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Black,
+            )
         }
     }
 }
