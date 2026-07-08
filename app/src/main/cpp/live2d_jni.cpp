@@ -208,16 +208,13 @@ static bool initLua(Renderer* renderer) {
     static const char* bootstrap = R"lua(
 package.path = __bp_runtime_root .. "/?.lua;" .. __bp_runtime_root .. "/?/init.lua;" .. package.path
 package.cpath = __bp_runtime_root .. "/?.so;" .. package.cpath
-local ffi = require("ffi")
 local gl = require("live2d.gl_loader")
 if gl.ensureExtensions then gl.ensureExtensions() end
 local renderer = nil
-local kind = nil
 local width = 1
 local height = 1
 local groups = {}
 local group_index = 1
-local projection = ffi.new("float[16]", {1,0,0,0, 0,-1,0,0, 0,0,1,0, 0,0,0,1})
 
 local function ends_with(value, suffix)
     return value:sub(-#suffix) == suffix
@@ -225,8 +222,14 @@ end
 
 local function collect_moc3_groups()
     groups = {}
-    local refs = renderer:get_model_data() and renderer:get_model_data().file_references
-    for name, _ in pairs((refs and refs.motions) or {}) do
+    local motions = {}
+    if renderer.model_info then
+        motions = renderer:model_info().motions or {}
+    elseif renderer.get_model_data then
+        local refs = renderer:get_model_data() and renderer:get_model_data().file_references
+        motions = (refs and refs.motions) or {}
+    end
+    for name, _ in pairs(motions) do
         if not string.find(string.lower(name), "idle") then groups[#groups + 1] = name end
     end
 end
@@ -239,17 +242,14 @@ function __bp_load(path, w, h)
     width = w
     height = h
     if ends_with(path, ".model3.json") then
-        kind = "moc3"
-        local embed = require("live2d_moc3_embed")
-        renderer = embed.new()
-        renderer:set_gl(gl)
-        renderer:load_model(path)
-        collect_moc3_groups()
-    else
-        kind = "moc"
-        local embed = require("live2d_embed")
+        local embed = require("live2d_moc3_pet_embed")
         renderer = embed.new(width, height)
         renderer:load_model(path, width, height)
+        collect_moc3_groups()
+    else
+        local embed = require("live2d_embed")
+        renderer = embed.new(width, height)
+        renderer:load_model(path, width, height, { center = false })
         collect_moc_groups()
     end
     return true
@@ -274,14 +274,7 @@ end
 function __bp_draw()
     if not renderer then return end
     gl.glViewport(0, 0, width, height)
-    if kind == "moc3" then
-        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-        gl.glClear(0x00004000 + 0x00000400)
-        renderer:update(1.0 / 60.0)
-        renderer:render(projection)
-    else
-        renderer:draw({ r = 0.0, g = 0.0, b = 0.0, a = 0.0 })
-    end
+    renderer:draw({ r = 0.0, g = 0.0, b = 0.0, a = 0.0 })
 end
 )lua";
     return runLua(renderer, bootstrap);

@@ -67,10 +67,10 @@ class DataRepository(private val context: Context) {
 
         return declaredCostumes.mapNotNull { (costumeId, costumeName) ->
             val base = "models/${character.id}/$costumeId"
-            val modelJson = "$base/model.json"
+            val modelJson = findModelJson(base)
             val model3Json = findModel3Json(base)
             val modelPath = when {
-                assetExists(modelJson) -> modelJson
+                modelJson != null -> modelJson
                 model3Json != null -> model3Json
                 else -> null
             }
@@ -85,6 +85,12 @@ class DataRepository(private val context: Context) {
             }
         }
     }
+
+    private fun findModelJson(base: String): String? = runCatching {
+        val files = context.assets.list(base).orEmpty()
+        files.firstOrNull { it == "model.json" }
+            ?: files.firstOrNull { it.endsWith(".model.json") && !it.endsWith(".model3.json") }
+    }.getOrNull()?.let { "$base/$it" }
 
     private fun findModel3Json(base: String): String? = runCatching {
         context.assets.list(base).orEmpty().firstOrNull { it.endsWith(".model3.json") }?.let { "$base/$it" }
