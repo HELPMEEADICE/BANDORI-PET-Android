@@ -1,0 +1,16 @@
+package com.bandori.pet.live2d
+
+import android.view.Surface
+
+object NativeLive2D {
+    init {
+        System.loadLibrary("bandoripet")
+    }
+
+    external fun create(surface: Surface, runtimeRoot: String, width: Int, height: Int): Long
+    external fun resize(handle: Long, width: Int, height: Int)
+    external fun loadModel(handle: Long, modelPath: String): Boolean
+    external fun touch(handle: Long, x: Float, y: Float)
+    external fun lastError(handle: Long): String
+    external fun destroy(handle: Long)
+}

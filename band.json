@@ -1,0 +1,63 @@
+{
+  "bands": [
+    {
+      "id": "poppin_party",
+      "display": "Poppin'Party",
+      "logo": "band_logo/poppinparty.png",
+      "characters": ["kasumi", "tae", "rimi", "saaya", "arisa"]
+    },
+    {
+      "id": "afterglow",
+      "display": "Afterglow",
+      "logo": "band_logo/afterglow.png",
+      "characters": ["ran", "moca", "himari", "tomoe", "tsugumi"]
+    },
+    {
+      "id": "pastel_palettes",
+      "display": "Pastel*Palettes",
+      "logo": "band_logo/pastelpalettes.png",
+      "characters": ["aya", "hina", "chisato", "maya", "eve"]
+    },
+    {
+      "id": "hello_happy_world",
+      "display": "Hello, Happy World!",
+      "logo": "band_logo/hellohappyworld.png",
+      "characters": ["kokoro", "kaoru", "hagumi", "kanon", "misaki"]
+    },
+    {
+      "id": "roselia",
+      "display": "Roselia",
+      "logo": "band_logo/roselia.png",
+      "characters": ["yukina", "sayo", "lisa", "ako", "rinko"]
+    },
+    {
+      "id": "raise_a_suilen",
+      "display": "RAISE A SUILEN",
+      "logo": "band_logo/raiseasuilen.png",
+      "characters": ["pareo", "masuki", "rei", "lock", "chu2"]
+    },
+    {
+      "id": "morfonica",
+      "display": "Morfonica",
+      "logo": "band_logo/morfonica.png",
+      "characters": ["mashiro", "touko", "nanami", "tsukushi", "rui"]
+    },
+    {
+      "id": "mygo",
+      "display": "MyGO!!!!!",
+      "logo": "band_logo/mygo.png",
+      "characters": ["tomorin", "anon", "rana", "soyo", "taki"]
+    },
+    {
+      "id": "ave_mujica",
+      "display": "Ave Mujica",
+      "logo": "band_logo/avemujica.png",
+      "characters": ["sakiko", "mutsumi", "uika", "umiri", "nyamu"]
+    },
+    {
+      "id": "others",
+      "display": "其他角色",
+      "characters": ["mana", "asuka"]
+    }
+  ]
+}
