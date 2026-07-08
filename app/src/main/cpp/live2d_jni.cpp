@@ -73,6 +73,10 @@ struct Renderer {
     std::atomic<bool> running{true};
     std::atomic<bool> pendingResize{false};
     std::atomic<bool> pendingTouch{false};
+    std::atomic<bool> pendingTransform{false};
+    std::atomic<float> transformOffsetX{0.0f};
+    std::atomic<float> transformOffsetY{0.0f};
+    std::atomic<float> transformScale{1.0f};
 };
 
 static int positiveSize(int value) {
@@ -243,6 +247,9 @@ local width = 1
 local height = 1
 local groups = {}
 local group_index = 1
+local offset_x = 0
+local offset_y = 0
+local scale = 1
 
 local function ends_with(value, suffix)
     return value:sub(-#suffix) == suffix
@@ -280,6 +287,8 @@ function __bp_load(path, w, h)
         renderer:load_model(path, width, height, { center = false })
         collect_moc_groups()
     end
+    if renderer.set_offset then renderer:set_offset(offset_x, offset_y) end
+    if renderer.set_scale then renderer:set_scale(scale) end
     return true
 end
 
@@ -299,6 +308,15 @@ function __bp_touch()
     end
 end
 
+function __bp_transform(x, y, s)
+    offset_x = tonumber(x) or 0
+    offset_y = tonumber(y) or 0
+    scale = tonumber(s) or 1
+    if not renderer then return end
+    if renderer.set_offset then renderer:set_offset(offset_x, offset_y) end
+    if renderer.set_scale then renderer:set_scale(scale) end
+end
+
 function __bp_draw(time_msec)
     if not renderer then return end
     gl.glViewport(0, 0, width, height)
@@ -315,6 +333,7 @@ static void renderLoop(Renderer* renderer) {
         std::string model;
         bool shouldTouch = renderer->pendingTouch.exchange(false);
         bool shouldResize = renderer->pendingResize.exchange(false);
+        bool shouldTransform = renderer->pendingTransform.exchange(false);
         int width = renderer->width.load();
         int height = renderer->height.load();
         {
@@ -338,6 +357,13 @@ static void renderLoop(Renderer* renderer) {
         if (shouldTouch) {
             getGlobal(renderer, "__bp_touch");
             callLua(renderer, "__bp_touch", 0);
+        }
+        if (shouldTransform) {
+            getGlobal(renderer, "__bp_transform");
+            renderer->luaApi.pushNumber(renderer->lua, renderer->transformOffsetX.load());
+            renderer->luaApi.pushNumber(renderer->lua, renderer->transformOffsetY.load());
+            renderer->luaApi.pushNumber(renderer->lua, renderer->transformScale.load());
+            callLua(renderer, "__bp_transform", 3);
         }
 
         getGlobal(renderer, "__bp_draw");
@@ -397,6 +423,16 @@ Java_com_bandori_pet_live2d_NativeLive2D_loadModel(JNIEnv* env, jobject, jlong h
     }
     env->ReleaseStringUTFChars(modelPath, modelChars);
     return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_setTransform(JNIEnv*, jobject, jlong handle, jfloat offsetX, jfloat offsetY, jfloat scale) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+    renderer->transformOffsetX.store(offsetX);
+    renderer->transformOffsetY.store(offsetY);
+    renderer->transformScale.store(scale);
+    renderer->pendingTransform.store(true);
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -10,6 +10,7 @@ object NativeLive2D {
     external fun create(surface: Surface, runtimeRoot: String, width: Int, height: Int): Long
     external fun resize(handle: Long, width: Int, height: Int)
     external fun loadModel(handle: Long, modelPath: String): Boolean
+    external fun setTransform(handle: Long, offsetX: Float, offsetY: Float, scale: Float)
     external fun touch(handle: Long, x: Float, y: Float)
     external fun lastError(handle: Long): String
     external fun destroy(handle: Long)

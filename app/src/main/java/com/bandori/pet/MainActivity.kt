@@ -5,6 +5,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -60,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.bandori.pet.data.AppData
@@ -69,6 +73,7 @@ import com.bandori.pet.data.DataRepository
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.ui.theme.BandoriPetTheme
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,6 +100,7 @@ private fun BandoriPetApp() {
     var selectedBandId by remember { mutableStateOf<String?>(null) }
     var selectedCharacterId by remember { mutableStateOf("tomorin") }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
+    var live2DFullScreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val repository = DataRepository(context)
@@ -111,6 +117,13 @@ private fun BandoriPetApp() {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
+        } else if (selectedScreen == Screen.Live2D && live2DFullScreen) {
+            Live2DScreen(
+                selectedModel = selectedModel,
+                fullScreen = true,
+                onFullScreenChanged = { live2DFullScreen = it },
+                modifier = Modifier.fillMaxSize(),
+            )
         } else {
             Scaffold(
                 bottomBar = {
@@ -118,7 +131,10 @@ private fun BandoriPetApp() {
                         Screen.entries.forEach { screen ->
                             NavigationBarItem(
                                 selected = selectedScreen == screen,
-                                onClick = { selectedScreen = screen },
+                                onClick = {
+                                    selectedScreen = screen
+                                    live2DFullScreen = false
+                                },
                                 icon = { NavIcon(screen, selectedScreen == screen) },
                                 label = { Text(screen.title, fontWeight = FontWeight.Bold) },
                             )
@@ -136,7 +152,11 @@ private fun BandoriPetApp() {
                     Spacer(Modifier.height(12.dp))
                     AnimatedContent(targetState = selectedScreen, label = "screen") { screen ->
                         when (screen) {
-                            Screen.Live2D -> Live2DScreen(selectedModel)
+                            Screen.Live2D -> Live2DScreen(
+                                selectedModel = selectedModel,
+                                fullScreen = false,
+                                onFullScreenChanged = { live2DFullScreen = it },
+                            )
                             Screen.Model -> ModelScreen(
                                 data = data,
                                 selectedBandId = selectedBandId,
@@ -185,63 +205,192 @@ private fun Header(selectedModel: ModelChoice?) {
 }
 
 @Composable
-private fun Live2DScreen(selectedModel: ModelChoice?) {
+private fun Live2DScreen(
+    selectedModel: ModelChoice?,
+    fullScreen: Boolean,
+    onFullScreenChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var status by remember(selectedModel) { mutableStateOf<String?>(null) }
-    ElevatedCard(
-        modifier = Modifier.fillMaxSize(),
-        shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(14.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.surface,
-                        ),
-                    ),
-                )
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(26.dp)),
-            contentAlignment = Alignment.Center,
+    var locked by remember(selectedModel) { mutableStateOf(true) }
+    var controlsVisible by remember(selectedModel) { mutableStateOf(true) }
+    var controlPulse by remember(selectedModel) { mutableStateOf(0) }
+
+    fun revealControls() {
+        controlsVisible = true
+        controlPulse += 1
+    }
+
+    LaunchedEffect(controlsVisible, controlPulse) {
+        if (controlsVisible) {
+            delay(10_000)
+            controlsVisible = false
+        }
+    }
+
+    if (fullScreen) {
+        Live2DStage(
+            selectedModel = selectedModel,
+            status = status,
+            locked = locked,
+            controlsVisible = controlsVisible,
+            fullScreen = true,
+            cornerRadius = 0.dp,
+            onStatusChanged = { status = it },
+            onInteraction = { revealControls() },
+            onLockedChange = {
+                locked = it
+                revealControls()
+            },
+            onFullScreenChanged = {
+                onFullScreenChanged(it)
+                revealControls()
+            },
+            modifier = modifier,
+        )
+    } else {
+        ElevatedCard(
+            modifier = modifier.fillMaxSize(),
+            shape = RoundedCornerShape(32.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
-            if (selectedModel == null) {
-                EmptyMessage("还没有可展示的模型", "进入“模型”页选择乐队和角色。")
-            } else {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { context ->
-                        Live2DRenderView(context).apply {
-                            statusChanged = { status = it }
-                            setModel(selectedModel)
-                        }
-                    },
-                    update = { view ->
-                        view.statusChanged = { status = it }
-                        view.setModel(selectedModel)
-                    },
+            Live2DStage(
+                selectedModel = selectedModel,
+                status = status,
+                locked = locked,
+                controlsVisible = controlsVisible,
+                fullScreen = false,
+                cornerRadius = 26.dp,
+                onStatusChanged = { status = it },
+                onInteraction = { revealControls() },
+                onLockedChange = {
+                    locked = it
+                    revealControls()
+                },
+                onFullScreenChanged = {
+                    onFullScreenChanged(it)
+                    revealControls()
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Live2DStage(
+    selectedModel: ModelChoice?,
+    status: String?,
+    locked: Boolean,
+    controlsVisible: Boolean,
+    fullScreen: Boolean,
+    cornerRadius: Dp,
+    onStatusChanged: (String?) -> Unit,
+    onInteraction: () -> Unit,
+    onLockedChange: (Boolean) -> Unit,
+    onFullScreenChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(cornerRadius)
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primaryContainer,
+                        MaterialTheme.colorScheme.surface,
+                    ),
+                ),
+            )
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selectedModel == null) {
+            EmptyMessage("还没有可展示的模型", "进入“模型”页选择乐队和角色。")
+        } else {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    Live2DRenderView(context).apply {
+                        statusChanged = onStatusChanged
+                        interactionChanged = onInteraction
+                        setInteractionLocked(locked)
+                        setModel(selectedModel)
+                    }
+                },
+                update = { view ->
+                    view.statusChanged = onStatusChanged
+                    view.interactionChanged = onInteraction
+                    view.setInteractionLocked(locked)
+                    view.setModel(selectedModel)
+                },
+            )
+        }
+        status?.let {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(18.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                shape = RoundedCornerShape(18.dp),
+                tonalElevation = 6.dp,
+            ) {
+                Text(
+                    text = it,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-            }
-            status?.let {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(18.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                    shape = RoundedCornerShape(18.dp),
-                    tonalElevation = 6.dp,
-                ) {
-                    Text(
-                        text = it,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
             }
         }
+        AnimatedVisibility(
+            visible = controlsVisible && selectedModel != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.matchParentSize(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                Live2DControlButton(
+                    text = if (locked) "锁定" else "解锁",
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(18.dp),
+                    onClick = { onLockedChange(!locked) },
+                )
+                Live2DControlButton(
+                    text = if (fullScreen) "退出" else "全屏",
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(18.dp),
+                    onClick = { onFullScreenChanged(!fullScreen) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Live2DControlButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
