@@ -8,3 +8,4 @@ local.properties
 captures/
 third_party/
 models/
+*.hprof
