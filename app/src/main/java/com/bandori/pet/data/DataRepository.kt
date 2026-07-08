@@ -59,14 +59,23 @@ class DataRepository(private val context: Context) {
     }.getOrDefault(false)
 
     fun availableModels(character: CharacterInfo): List<ModelChoice> {
-        val declaredCostumes = if (character.costumes.isEmpty()) {
+        val costumeChoices = if (character.costumes.isEmpty()) {
             linkedMapOf("live_default" to "默认")
         } else {
-            character.costumes
+            character.costumes.toMutableMap()
         }
 
-        return declaredCostumes.mapNotNull { (costumeId, costumeName) ->
-            val base = "models/${character.id}/$costumeId"
+        val characterBase = "models/${character.id}"
+        val localCostumes = runCatching { context.assets.list(characterBase).orEmpty().sorted() }
+            .getOrDefault(emptyList())
+        for (costumeId in localCostumes) {
+            if (!costumeChoices.containsKey(costumeId)) {
+                costumeChoices[costumeId] = costumeId
+            }
+        }
+
+        return costumeChoices.mapNotNull { (costumeId, costumeName) ->
+            val base = "$characterBase/$costumeId"
             val modelJson = findModelJson(base)
             val model3Json = findModel3Json(base)
             val modelPath = when {
