@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -90,6 +91,13 @@ private enum class Screen(val title: String) {
     Live2D("Live2D"),
     Model("模型"),
     Settings("设置"),
+}
+
+private enum class Live2DControlIcon {
+    Lock,
+    Unlock,
+    FullScreen,
+    ExitFullScreen,
 }
 
 @Composable
@@ -353,14 +361,14 @@ private fun Live2DStage(
         ) {
             Box(Modifier.fillMaxSize()) {
                 Live2DControlButton(
-                    text = if (locked) "锁定" else "解锁",
+                    icon = if (locked) Live2DControlIcon.Lock else Live2DControlIcon.Unlock,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(18.dp),
                     onClick = { onLockedChange(!locked) },
                 )
                 Live2DControlButton(
-                    text = if (fullScreen) "退出" else "全屏",
+                    icon = if (fullScreen) Live2DControlIcon.ExitFullScreen else Live2DControlIcon.FullScreen,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(18.dp),
@@ -373,10 +381,11 @@ private fun Live2DStage(
 
 @Composable
 private fun Live2DControlButton(
-    text: String,
+    icon: Live2DControlIcon,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val iconColor = MaterialTheme.colorScheme.onSurface
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
@@ -385,12 +394,58 @@ private fun Live2DControlButton(
         tonalElevation = 8.dp,
         shadowElevation = 8.dp,
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-        )
+        Canvas(
+            modifier = Modifier
+                .padding(12.dp)
+                .size(26.dp),
+        ) {
+            val strokeWidth = 2.4.dp.toPx()
+            val stroke = Stroke(width = strokeWidth)
+            val w = size.width
+            val h = size.height
+            when (icon) {
+                Live2DControlIcon.Lock, Live2DControlIcon.Unlock -> {
+                    val bodyTop = h * 0.45f
+                    drawRoundRect(
+                        color = iconColor,
+                        topLeft = Offset(w * 0.24f, bodyTop),
+                        size = Size(w * 0.52f, h * 0.38f),
+                        cornerRadius = CornerRadius(w * 0.08f, w * 0.08f),
+                        style = stroke,
+                    )
+                    val shackleLeft = if (icon == Live2DControlIcon.Lock) w * 0.34f else w * 0.46f
+                    drawArc(
+                        color = iconColor,
+                        startAngle = 180f,
+                        sweepAngle = 180f,
+                        useCenter = false,
+                        topLeft = Offset(shackleLeft, h * 0.18f),
+                        size = Size(w * 0.32f, h * 0.48f),
+                        style = stroke,
+                    )
+                }
+                Live2DControlIcon.FullScreen -> {
+                    drawLine(iconColor, Offset(w * 0.15f, h * 0.4f), Offset(w * 0.15f, h * 0.15f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.15f, h * 0.15f), Offset(w * 0.4f, h * 0.15f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.6f, h * 0.15f), Offset(w * 0.85f, h * 0.15f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.85f, h * 0.15f), Offset(w * 0.85f, h * 0.4f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.85f, h * 0.6f), Offset(w * 0.85f, h * 0.85f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.85f, h * 0.85f), Offset(w * 0.6f, h * 0.85f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.4f, h * 0.85f), Offset(w * 0.15f, h * 0.85f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.15f, h * 0.85f), Offset(w * 0.15f, h * 0.6f), strokeWidth)
+                }
+                Live2DControlIcon.ExitFullScreen -> {
+                    drawLine(iconColor, Offset(w * 0.15f, h * 0.4f), Offset(w * 0.4f, h * 0.4f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.4f, h * 0.4f), Offset(w * 0.4f, h * 0.15f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.6f, h * 0.15f), Offset(w * 0.6f, h * 0.4f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.6f, h * 0.4f), Offset(w * 0.85f, h * 0.4f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.85f, h * 0.6f), Offset(w * 0.6f, h * 0.6f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.6f, h * 0.6f), Offset(w * 0.6f, h * 0.85f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.4f, h * 0.85f), Offset(w * 0.4f, h * 0.6f), strokeWidth)
+                    drawLine(iconColor, Offset(w * 0.4f, h * 0.6f), Offset(w * 0.15f, h * 0.6f), strokeWidth)
+                }
+            }
+        }
     }
 }
 
