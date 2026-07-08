@@ -9,3 +9,4 @@ captures/
 third_party/
 models/
 *.hprof
+jniLibs/
