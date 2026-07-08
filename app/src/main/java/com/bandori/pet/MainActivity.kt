@@ -1,5 +1,6 @@
 package com.bandori.pet
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -41,7 +42,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,6 +78,34 @@ import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
+
+private const val SETTINGS_PREFS = "bandori_pet_settings"
+private const val KEY_FPS_LIMIT = "fps_limit"
+private const val KEY_VSYNC_ENABLED = "vsync_enabled"
+
+private data class RenderSettings(
+    val fpsLimit: Int = 60,
+    val vsyncEnabled: Boolean = true,
+) {
+    fun save(context: Context) {
+        context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_FPS_LIMIT, fpsLimit)
+            .putBoolean(KEY_VSYNC_ENABLED, vsyncEnabled)
+            .apply()
+    }
+
+    companion object {
+        fun load(context: Context): RenderSettings {
+            val prefs = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            return RenderSettings(
+                fpsLimit = prefs.getInt(KEY_FPS_LIMIT, 60).coerceIn(15, 120),
+                vsyncEnabled = prefs.getBoolean(KEY_VSYNC_ENABLED, true),
+            )
+        }
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,6 +140,11 @@ private fun BandoriPetApp() {
     var selectedCharacterId by remember { mutableStateOf("tomorin") }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
     var live2DFullScreen by remember { mutableStateOf(false) }
+    var renderSettings by remember { mutableStateOf(RenderSettings.load(context.applicationContext)) }
+    val updateRenderSettings: (RenderSettings) -> Unit = { settings ->
+        renderSettings = settings
+        settings.save(context.applicationContext)
+    }
 
     LaunchedEffect(Unit) {
         val repository = DataRepository(context)
@@ -128,6 +164,7 @@ private fun BandoriPetApp() {
         } else if (selectedScreen == Screen.Live2D && live2DFullScreen) {
             Live2DScreen(
                 selectedModel = selectedModel,
+                renderSettings = renderSettings,
                 fullScreen = true,
                 onFullScreenChanged = { live2DFullScreen = it },
                 modifier = Modifier.fillMaxSize(),
@@ -162,6 +199,7 @@ private fun BandoriPetApp() {
                         when (screen) {
                             Screen.Live2D -> Live2DScreen(
                                 selectedModel = selectedModel,
+                                renderSettings = renderSettings,
                                 fullScreen = false,
                                 onFullScreenChanged = { live2DFullScreen = it },
                             )
@@ -184,7 +222,10 @@ private fun BandoriPetApp() {
                                 },
                                 onModelSelected = { selectedModel = it },
                             )
-                            Screen.Settings -> SettingsScreen(selectedModel)
+                            Screen.Settings -> SettingsScreen(
+                                renderSettings = renderSettings,
+                                onRenderSettingsChanged = updateRenderSettings,
+                            )
                         }
                     }
                 }
@@ -215,6 +256,7 @@ private fun Header(selectedModel: ModelChoice?) {
 @Composable
 private fun Live2DScreen(
     selectedModel: ModelChoice?,
+    renderSettings: RenderSettings,
     fullScreen: Boolean,
     onFullScreenChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -239,6 +281,7 @@ private fun Live2DScreen(
     if (fullScreen) {
         Live2DStage(
             selectedModel = selectedModel,
+            renderSettings = renderSettings,
             status = status,
             locked = locked,
             controlsVisible = controlsVisible,
@@ -264,6 +307,7 @@ private fun Live2DScreen(
         ) {
             Live2DStage(
                 selectedModel = selectedModel,
+                renderSettings = renderSettings,
                 status = status,
                 locked = locked,
                 controlsVisible = controlsVisible,
@@ -290,6 +334,7 @@ private fun Live2DScreen(
 @Composable
 private fun Live2DStage(
     selectedModel: ModelChoice?,
+    renderSettings: RenderSettings,
     status: String?,
     locked: Boolean,
     controlsVisible: Boolean,
@@ -326,6 +371,7 @@ private fun Live2DStage(
                         statusChanged = onStatusChanged
                         interactionChanged = onInteraction
                         setInteractionLocked(locked)
+                        setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
                         setModel(selectedModel)
                     }
                 },
@@ -333,6 +379,7 @@ private fun Live2DStage(
                     view.statusChanged = onStatusChanged
                     view.interactionChanged = onInteraction
                     view.setInteractionLocked(locked)
+                    view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
                     view.setModel(selectedModel)
                 },
             )
@@ -560,15 +607,82 @@ private fun ModelScreen(
 }
 
 @Composable
-private fun SettingsScreen(selectedModel: ModelChoice?) {
+private fun SettingsScreen(
+    renderSettings: RenderSettings,
+    onRenderSettingsChanged: (RenderSettings) -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        InfoCard("渲染核心", "Live2D-v2-Lua + LuaJIT，通过 JNI 建立 Android EGL/OpenGL ES 2.0 上下文。moc 使用 live2d_embed.lua，moc3/model3 使用 live2d_moc3_embed.lua。")
-        InfoCard("运行要求", "运行设备需要支持 OpenGL ES 2.0，并在 app/src/main/jniLibs/<abi>/ 提供 libluajit.so。")
-        InfoCard("当前模型", selectedModel?.modelAssetPath ?: "未选择")
-        InfoCard("关于", "Bandori Pet Android，原生 Material Design 3 风格。点击 Live2D 展示框会轮换触发模型动作。")
+        RenderSettingsCard(
+            settings = renderSettings,
+            onSettingsChanged = onRenderSettingsChanged,
+        )
+        InfoCard(
+            "关于",
+            "Bandori Pet Android。点击 Live2D 展示框会轮换触发模型动作。当前项目使用 GPLv3 许可证发布。",
+        )
+    }
+}
+
+@Composable
+private fun RenderSettingsCard(
+    settings: RenderSettings,
+    onSettingsChanged: (RenderSettings) -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("渲染设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "这些选项会立即应用到 Live2D 渲染线程，并自动保存。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("模型渲染 FPS 限制", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${settings.fpsLimit} FPS",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Slider(
+                    value = settings.fpsLimit.toFloat(),
+                    onValueChange = { value ->
+                        val fps = (value / 5f).roundToInt().coerceIn(3, 24) * 5
+                        onSettingsChanged(settings.copy(fpsLimit = fps))
+                    },
+                    valueRange = 15f..120f,
+                    steps = 20,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("垂直同步", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.vsyncEnabled) "跟随屏幕刷新，减少画面撕裂。" else "关闭后只受 FPS 限制影响。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = settings.vsyncEnabled,
+                    onCheckedChange = { enabled -> onSettingsChanged(settings.copy(vsyncEnabled = enabled)) },
+                )
+            }
+        }
     }
 }
 

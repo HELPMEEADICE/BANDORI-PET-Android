@@ -74,6 +74,9 @@ struct Renderer {
     std::atomic<bool> pendingResize{false};
     std::atomic<bool> pendingTouch{false};
     std::atomic<bool> pendingTransform{false};
+    std::atomic<bool> pendingRenderOptions{false};
+    std::atomic<int> fpsLimit{60};
+    std::atomic<bool> vsyncEnabled{true};
     std::atomic<float> transformOffsetX{0.0f};
     std::atomic<float> transformOffsetY{0.0f};
     std::atomic<float> transformScale{1.0f};
@@ -222,7 +225,7 @@ static bool initEgl(Renderer* renderer) {
         setError(renderer, "OpenGL ES 上下文创建失败");
         return false;
     }
-    eglSwapInterval(renderer->display, 1);
+    eglSwapInterval(renderer->display, renderer->vsyncEnabled.load() ? 1 : 0);
     return true;
 }
 
@@ -438,10 +441,12 @@ static void renderLoop(Renderer* renderer) {
     if (!initEgl(renderer) || !initLua(renderer)) return;
 
     while (renderer->running.load()) {
+        const auto frameStart = std::chrono::steady_clock::now();
         std::string model;
         bool shouldTouch = renderer->pendingTouch.exchange(false);
         bool shouldResize = renderer->pendingResize.exchange(false);
         bool shouldTransform = renderer->pendingTransform.exchange(false);
+        bool shouldUpdateRenderOptions = renderer->pendingRenderOptions.exchange(false);
         int width = renderer->width.load();
         int height = renderer->height.load();
         {
@@ -449,6 +454,9 @@ static void renderLoop(Renderer* renderer) {
             model.swap(renderer->pendingModel);
         }
 
+        if (shouldUpdateRenderOptions) {
+            eglSwapInterval(renderer->display, renderer->vsyncEnabled.load() ? 1 : 0);
+        }
         if (shouldResize) {
             getGlobal(renderer, "__bp_resize");
             renderer->luaApi.pushNumber(renderer->lua, width);
@@ -480,6 +488,12 @@ static void renderLoop(Renderer* renderer) {
         renderer->luaApi.pushNumber(renderer->lua, static_cast<double>(timeMs));
         callLua(renderer, "__bp_draw", 1);
         eglSwapBuffers(renderer->display, renderer->surface);
+
+        const int fpsLimit = renderer->fpsLimit.load();
+        if (fpsLimit > 0) {
+            const auto frameDuration = std::chrono::nanoseconds(1000000000LL / fpsLimit);
+            std::this_thread::sleep_until(frameStart + frameDuration);
+        }
     }
 }
 
@@ -496,8 +510,19 @@ static void cleanup(Renderer* renderer) {
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_bandori_pet_live2d_NativeLive2D_create(JNIEnv* env, jobject, jobject surface, jstring runtimeRoot, jint width, jint height) {
+Java_com_bandori_pet_live2d_NativeLive2D_create(
+    JNIEnv* env,
+    jobject,
+    jobject surface,
+    jstring runtimeRoot,
+    jint width,
+    jint height,
+    jint fpsLimit,
+    jboolean vsyncEnabled
+) {
     auto* renderer = new Renderer();
+    renderer->fpsLimit.store(fpsLimit > 0 ? fpsLimit : 60);
+    renderer->vsyncEnabled.store(vsyncEnabled == JNI_TRUE);
     const char* runtimeChars = env->GetStringUTFChars(runtimeRoot, nullptr);
     renderer->runtimeRoot = runtimeChars != nullptr ? runtimeChars : "";
     env->ReleaseStringUTFChars(runtimeRoot, runtimeChars);
@@ -531,6 +556,15 @@ Java_com_bandori_pet_live2d_NativeLive2D_loadModel(JNIEnv* env, jobject, jlong h
     }
     env->ReleaseStringUTFChars(modelPath, modelChars);
     return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_setRenderOptions(JNIEnv*, jobject, jlong handle, jint fpsLimit, jboolean vsyncEnabled) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+    renderer->fpsLimit.store(fpsLimit > 0 ? fpsLimit : 60);
+    renderer->vsyncEnabled.store(vsyncEnabled == JNI_TRUE);
+    renderer->pendingRenderOptions.store(true);
 }
 
 extern "C" JNIEXPORT void JNICALL

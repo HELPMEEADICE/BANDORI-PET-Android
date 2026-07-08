@@ -25,6 +25,8 @@ class Live2DRenderView @JvmOverloads constructor(
     private var selectedModel: ModelChoice? = null
     private var loading = false
     private var interactionLocked = true
+    private var fpsLimit = 60
+    private var vsyncEnabled = true
     private var offsetX = 0f
     private var offsetY = 0f
     private var modelScale = 1f
@@ -55,6 +57,14 @@ class Live2DRenderView @JvmOverloads constructor(
 
     fun setInteractionLocked(locked: Boolean) {
         interactionLocked = locked
+    }
+
+    fun setRenderOptions(fpsLimit: Int, vsyncEnabled: Boolean) {
+        val nextFpsLimit = fpsLimit.coerceIn(15, 120)
+        if (this.fpsLimit == nextFpsLimit && this.vsyncEnabled == vsyncEnabled) return
+        this.fpsLimit = nextFpsLimit
+        this.vsyncEnabled = vsyncEnabled
+        if (handle != 0L) NativeLive2D.setRenderOptions(handle, nextFpsLimit, vsyncEnabled)
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
@@ -91,7 +101,14 @@ class Live2DRenderView @JvmOverloads constructor(
                     if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
                         if (handle != 0L) NativeLive2D.destroy(handle)
                         runtimeRoot = prepared.runtimeRoot
-                        handle = NativeLive2D.create(holder.surface, prepared.runtimeRoot, width.coerceAtLeast(1), height.coerceAtLeast(1))
+                        handle = NativeLive2D.create(
+                            holder.surface,
+                            prepared.runtimeRoot,
+                            width.coerceAtLeast(1),
+                            height.coerceAtLeast(1),
+                            fpsLimit,
+                            vsyncEnabled,
+                        )
                         applyTransform()
                     }
                     val accepted = handle != 0L && NativeLive2D.loadModel(handle, prepared.modelPath)
