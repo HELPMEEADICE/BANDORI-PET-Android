@@ -1,5 +1,6 @@
 #include <EGL/egl.h>
 #include <android/log.h>
+#include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <dlfcn.h>
 #include <jni.h>
@@ -33,6 +34,8 @@
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "BandoriPet", __VA_ARGS__)
 
+static constexpr int MAX_RENDER_EDGE = 1280;
+
 struct lua_State;
 
 struct LuaApi {
@@ -57,8 +60,8 @@ struct Renderer {
     EGLDisplay display = EGL_NO_DISPLAY;
     EGLSurface surface = EGL_NO_SURFACE;
     EGLContext context = EGL_NO_CONTEXT;
-    int width = 1;
-    int height = 1;
+    std::atomic<int> width{1};
+    std::atomic<int> height{1};
 
     LuaApi luaApi;
     lua_State* lua = nullptr;
@@ -71,6 +74,29 @@ struct Renderer {
     std::atomic<bool> pendingResize{false};
     std::atomic<bool> pendingTouch{false};
 };
+
+static int positiveSize(int value) {
+    return value > 0 ? value : 1;
+}
+
+static void configureRenderSize(Renderer* renderer, int surfaceWidth, int surfaceHeight) {
+    const int srcWidth = positiveSize(surfaceWidth);
+    const int srcHeight = positiveSize(surfaceHeight);
+    const int maxEdge = srcWidth > srcHeight ? srcWidth : srcHeight;
+    int renderWidth = srcWidth;
+    int renderHeight = srcHeight;
+    if (maxEdge > MAX_RENDER_EDGE) {
+        renderWidth = (srcWidth * MAX_RENDER_EDGE + maxEdge / 2) / maxEdge;
+        renderHeight = (srcHeight * MAX_RENDER_EDGE + maxEdge / 2) / maxEdge;
+        if (renderWidth < 1) renderWidth = 1;
+        if (renderHeight < 1) renderHeight = 1;
+    }
+    renderer->width.store(renderWidth);
+    renderer->height.store(renderHeight);
+    if (renderer->window != nullptr) {
+        ANativeWindow_setBuffersGeometry(renderer->window, renderWidth, renderHeight, WINDOW_FORMAT_RGBA_8888);
+    }
+}
 
 static void setError(Renderer* renderer, const std::string& error) {
     std::lock_guard<std::mutex> lock(renderer->mutex);
@@ -192,6 +218,7 @@ static bool initEgl(Renderer* renderer) {
         setError(renderer, "OpenGL ES 上下文创建失败");
         return false;
     }
+    eglSwapInterval(renderer->display, 1);
     return true;
 }
 
@@ -288,8 +315,8 @@ static void renderLoop(Renderer* renderer) {
         std::string model;
         bool shouldTouch = renderer->pendingTouch.exchange(false);
         bool shouldResize = renderer->pendingResize.exchange(false);
-        int width = renderer->width;
-        int height = renderer->height;
+        int width = renderer->width.load();
+        int height = renderer->height.load();
         {
             std::lock_guard<std::mutex> lock(renderer->mutex);
             model.swap(renderer->pendingModel);
@@ -319,7 +346,6 @@ static void renderLoop(Renderer* renderer) {
         renderer->luaApi.pushNumber(renderer->lua, static_cast<double>(timeMs));
         callLua(renderer, "__bp_draw", 1);
         eglSwapBuffers(renderer->display, renderer->surface);
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 }
 
@@ -341,13 +367,12 @@ Java_com_bandori_pet_live2d_NativeLive2D_create(JNIEnv* env, jobject, jobject su
     const char* runtimeChars = env->GetStringUTFChars(runtimeRoot, nullptr);
     renderer->runtimeRoot = runtimeChars != nullptr ? runtimeChars : "";
     env->ReleaseStringUTFChars(runtimeRoot, runtimeChars);
-    renderer->width = width > 0 ? width : 1;
-    renderer->height = height > 0 ? height : 1;
     renderer->window = ANativeWindow_fromSurface(env, surface);
     if (renderer->window == nullptr) {
         delete renderer;
         return 0;
     }
+    configureRenderSize(renderer, width, height);
     renderer->renderThread = std::thread(renderLoop, renderer);
     return reinterpret_cast<jlong>(renderer);
 }
@@ -356,8 +381,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_bandori_pet_live2d_NativeLive2D_resize(JNIEnv*, jobject, jlong handle, jint width, jint height) {
     auto* renderer = reinterpret_cast<Renderer*>(handle);
     if (renderer == nullptr) return;
-    renderer->width = width > 0 ? width : 1;
-    renderer->height = height > 0 ? height : 1;
+    configureRenderSize(renderer, width, height);
     renderer->pendingResize.store(true);
 }
 
