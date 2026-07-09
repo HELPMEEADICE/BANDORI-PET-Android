@@ -36,11 +36,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -535,7 +536,31 @@ private fun ModelScreen(
     }
     var downloadingModel by remember(selectedCharacter?.id) { mutableStateOf(false) }
     var downloadMessage by remember(selectedCharacter?.id) { mutableStateOf<String?>(null) }
-    var characterDeleteTarget by remember { mutableStateOf<CharacterInfo?>(null) }
+
+    fun updateCharacterModel(character: CharacterInfo) {
+        scope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    ZstModelArchive.downloadCharacter(context.applicationContext, character.id)
+                }
+            }
+            result.onSuccess {
+                if (selectedCharacterId == character.id) downloadMessage = "更新完成，正在载入..."
+                onModelAssetsChanged()
+            }.onFailure { error ->
+                if (selectedCharacterId == character.id) downloadMessage = error.localizedMessage ?: "更新失败"
+            }
+        }
+    }
+
+    fun deleteCharacterModel(character: CharacterInfo) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                ZstModelArchive.deleteDownloadedCharacter(context.applicationContext, character.id)
+            }
+            onModelAssetsChanged()
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -582,16 +607,61 @@ private fun ModelScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(characters, key = { it.id }) { character ->
-                    ImageCard(
-                        title = character.display,
-                        subtitle = selectedBand.display,
-                        imagePath = "models/${character.id}/character.png",
-                        imageReloadKey = modelAssetsVersion,
-                        selected = character.id == selectedCharacterId,
-                        aspectRatio = 0.82f,
-                        onClick = { onCharacterSelected(character) },
-                        onLongClick = { characterDeleteTarget = character },
-                    )
+                    var menuExpanded by remember(character.id) { mutableStateOf(false) }
+                    val hasDownloadedModel = remember(menuExpanded, modelAssetsVersion, character.id) {
+                        menuExpanded && ZstModelArchive.hasDownloadedCharacter(context.applicationContext, character.id)
+                    }
+
+                    Box {
+                        ImageCard(
+                            title = character.display,
+                            subtitle = selectedBand.display,
+                            imagePath = "models/${character.id}/character.png",
+                            imageReloadKey = modelAssetsVersion,
+                            selected = character.id == selectedCharacterId,
+                            aspectRatio = 0.82f,
+                            onClick = { onCharacterSelected(character) },
+                            onLongClick = { menuExpanded = true },
+                        )
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier.width(224.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            tonalElevation = 6.dp,
+                        ) {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                                Text(
+                                    text = character.display,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = "角色模型",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("更新模型") },
+                                onClick = {
+                                    menuExpanded = false
+                                    updateCharacterModel(character)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除已下载模型") },
+                                enabled = hasDownloadedModel,
+                                onClick = {
+                                    menuExpanded = false
+                                    deleteCharacterModel(character)
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -653,65 +723,6 @@ private fun ModelScreen(
         }
     }
 
-    characterDeleteTarget?.let { character ->
-        val hasDownloadedModel = ZstModelArchive.hasDownloadedCharacter(context.applicationContext, character.id)
-        AlertDialog(
-            onDismissRequest = { characterDeleteTarget = null },
-            title = { Text("管理角色模型") },
-            text = {
-                Text(
-                    if (hasDownloadedModel) {
-                        "可以重新下载 ${character.display} 的 .zst 模型，或删除已下载模型。"
-                    } else {
-                        "可以重新下载 ${character.display} 的 .zst 模型。当前没有可删除的已下载模型，内置模型无法删除。"
-                    },
-                )
-            },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(
-                        onClick = {
-                            characterDeleteTarget = null
-                            scope.launch {
-                                val result = runCatching {
-                                    withContext(Dispatchers.IO) {
-                                        ZstModelArchive.downloadCharacter(context.applicationContext, character.id)
-                                    }
-                                }
-                                result.onSuccess {
-                                    if (selectedCharacterId == character.id) downloadMessage = "更新完成，正在载入..."
-                                    onModelAssetsChanged()
-                                }.onFailure { error ->
-                                    if (selectedCharacterId == character.id) downloadMessage = error.localizedMessage ?: "更新失败"
-                                }
-                            }
-                        },
-                    ) {
-                        Text("更新模型")
-                    }
-                    TextButton(
-                        enabled = hasDownloadedModel,
-                        onClick = {
-                            characterDeleteTarget = null
-                            scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    ZstModelArchive.deleteDownloadedCharacter(context.applicationContext, character.id)
-                                }
-                                onModelAssetsChanged()
-                            }
-                        },
-                    ) {
-                        Text("删除")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { characterDeleteTarget = null }) {
-                    Text("取消")
-                }
-            },
-        )
-    }
 }
 
 @Composable
