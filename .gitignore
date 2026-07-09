@@ -10,3 +10,5 @@ third_party/
 models/
 *.hprof
 jniLibs/
+*.jks
+*.keystore
