@@ -6,46 +6,71 @@ import org.json.JSONObject
 class DataRepository(private val context: Context) {
     fun load(): AppData {
         val bandsJson = JSONObject(readAssetText("band.json"))
-        val bands = bandsJson.getJSONArray("bands").let { array ->
-            buildList {
-                for (index in 0 until array.length()) {
-                    val item = array.getJSONObject(index)
-                    val characters = item.getJSONArray("characters")
-                    add(
-                        Band(
-                            id = item.getString("id"),
-                            display = item.getString("display"),
-                            logo = item.optString("logo").takeIf { it.isNotBlank() },
-                            characters = buildList {
-                                for (characterIndex in 0 until characters.length()) {
-                                    add(characters.getString(characterIndex))
-                                }
-                            },
-                        ),
-                    )
-                }
+        val bands = mutableListOf<Band>()
+        bandsJson.getJSONArray("bands").let { array ->
+            for (index in 0 until array.length()) {
+                val item = array.getJSONObject(index)
+                val characters = item.getJSONArray("characters")
+                bands.add(
+                    Band(
+                        id = item.getString("id"),
+                        display = item.getString("display"),
+                        logo = item.optString("logo").takeIf { it.isNotBlank() },
+                        characters = buildList {
+                            for (characterIndex in 0 until characters.length()) {
+                                add(characters.getString(characterIndex))
+                            }
+                        },
+                    ),
+                )
             }
         }
 
         val characterRoot = JSONObject(readAssetText("outfit.json")).getJSONObject("characters")
-        val characters = buildMap {
-            val keys = characterRoot.keys()
-            while (keys.hasNext()) {
-                val id = keys.next()
-                val item = characterRoot.getJSONObject(id)
-                val costumesJson = item.optJSONObject("costumes") ?: JSONObject()
-                val costumeMap = linkedMapOf<String, String>()
-                val costumeKeys = costumesJson.keys()
-                while (costumeKeys.hasNext()) {
-                    val costumeId = costumeKeys.next()
-                    costumeMap[costumeId] = costumesJson.optString(costumeId, costumeId)
-                }
-                put(
-                    id,
-                    CharacterInfo(
-                        id = id,
-                        display = item.optString("display", id),
-                        costumes = costumeMap,
+        val characters = linkedMapOf<String, CharacterInfo>()
+        val keys = characterRoot.keys()
+        while (keys.hasNext()) {
+            val id = keys.next()
+            val item = characterRoot.getJSONObject(id)
+            val costumesJson = item.optJSONObject("costumes") ?: JSONObject()
+            val costumeMap = linkedMapOf<String, String>()
+            val costumeKeys = costumesJson.keys()
+            while (costumeKeys.hasNext()) {
+                val costumeId = costumeKeys.next()
+                costumeMap[costumeId] = costumesJson.optString(costumeId, costumeId)
+            }
+            characters[id] = CharacterInfo(
+                id = id,
+                display = item.optString("display", id),
+                costumes = costumeMap,
+            )
+        }
+
+        val archiveCharacterIds = ZstModelArchive.listCharacters(context)
+        for (characterId in archiveCharacterIds) {
+            characters.getOrPut(characterId) {
+                CharacterInfo(
+                    id = characterId,
+                    display = characterId,
+                    costumes = emptyMap(),
+                )
+            }
+        }
+
+        val groupedCharacterIds = bands.flatMap { it.characters }.toSet()
+        val ungroupedArchiveCharacterIds = archiveCharacterIds.filter { it !in groupedCharacterIds }
+        if (ungroupedArchiveCharacterIds.isNotEmpty()) {
+            val othersIndex = bands.indexOfFirst { it.id == "others" }
+            if (othersIndex >= 0) {
+                val others = bands[othersIndex]
+                bands[othersIndex] = others.copy(characters = (others.characters + ungroupedArchiveCharacterIds).distinct())
+            } else {
+                bands.add(
+                    Band(
+                        id = "others",
+                        display = "其他角色",
+                        logo = null,
+                        characters = ungroupedArchiveCharacterIds,
                     ),
                 )
             }

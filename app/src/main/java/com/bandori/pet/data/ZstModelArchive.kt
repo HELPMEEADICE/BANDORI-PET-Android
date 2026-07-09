@@ -20,6 +20,13 @@ object ZstModelArchive {
         return readEntries(context, resolved.archiveAssetPath, setOf(resolved.innerPath))[resolved.virtualPath]
     }
 
+    fun listCharacters(context: Context): List<String> = runCatching {
+        context.assets.list(LOGICAL_MODELS_ROOT.trimEnd('/')).orEmpty()
+            .mapNotNull { entry -> entry.takeIf { it.endsWith(".zst") }?.removeSuffix(".zst") }
+            .filter { it.isNotBlank() }
+            .sorted()
+    }.getOrDefault(emptyList())
+
     fun listCostumes(context: Context, characterId: String): List<String> {
         val archiveAssetPath = archiveAssetPath(characterId)
         return runCatching {
