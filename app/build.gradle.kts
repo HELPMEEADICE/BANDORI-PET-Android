@@ -79,6 +79,10 @@ val syncLive2DAssets by tasks.registering(Sync::class) {
         exclude("**/.git/**")
         exclude("**/venv/**")
         exclude("**/frames_output/**")
+        exclude("**/*.md")
+        exclude("**/tests/**")
+        exclude("**/test-data/**")
+        exclude("**/resources/**")
     }
 }
 
