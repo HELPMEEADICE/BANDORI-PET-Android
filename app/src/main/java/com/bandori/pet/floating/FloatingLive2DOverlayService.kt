@@ -61,6 +61,7 @@ class FloatingLive2DOverlayService : Service() {
                 existing.update(
                     item = item,
                     locked = settings.locked,
+                    touchThrough = settings.touchThrough,
                     fpsLimit = renderSettings.fpsLimit,
                     vsyncEnabled = renderSettings.vsyncEnabled,
                 )
@@ -70,6 +71,7 @@ class FloatingLive2DOverlayService : Service() {
                     context = this,
                     item = item,
                     locked = settings.locked,
+                    touchThrough = settings.touchThrough,
                     fpsLimit = renderSettings.fpsLimit,
                     vsyncEnabled = renderSettings.vsyncEnabled,
                     onBoundsChanged = { x, y, width, height ->
@@ -97,6 +99,7 @@ class FloatingLive2DOverlayService : Service() {
         context: Context,
         item: FloatingLive2DItem,
         locked: Boolean,
+        touchThrough: Boolean,
         fpsLimit: Int,
         vsyncEnabled: Boolean,
         onBoundsChanged: (Int, Int, Int, Int) -> Unit,
@@ -112,11 +115,11 @@ class FloatingLive2DOverlayService : Service() {
             item.width.coerceIn(MIN_WIDTH, MAX_WIDTH),
             item.height.coerceIn(MIN_HEIGHT, MAX_HEIGHT),
             overlayWindowType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            overlayWindowFlags(touchThrough),
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
+            alpha = overlayWindowAlpha(touchThrough)
             x = item.x
             y = item.y
         }
@@ -138,16 +141,33 @@ class FloatingLive2DOverlayService : Service() {
 
         fun canReuseFor(item: FloatingLive2DItem): Boolean = item.model.modelAssetPath == modelAssetPath
 
-        fun update(item: FloatingLive2DItem, locked: Boolean, fpsLimit: Int, vsyncEnabled: Boolean) {
+        fun update(
+            item: FloatingLive2DItem,
+            locked: Boolean,
+            touchThrough: Boolean,
+            fpsLimit: Int,
+            vsyncEnabled: Boolean,
+        ) {
             root.setLocked(locked)
             renderView.setRenderOptions(fpsLimit, vsyncEnabled)
             val nextWidth = item.width.coerceIn(MIN_WIDTH, MAX_WIDTH)
             val nextHeight = item.height.coerceIn(MIN_HEIGHT, MAX_HEIGHT)
-            if (params.x != item.x || params.y != item.y || params.width != nextWidth || params.height != nextHeight) {
+            val nextFlags = overlayWindowFlags(touchThrough)
+            val nextAlpha = overlayWindowAlpha(touchThrough)
+            if (
+                params.x != item.x ||
+                params.y != item.y ||
+                params.width != nextWidth ||
+                params.height != nextHeight ||
+                params.flags != nextFlags ||
+                params.alpha != nextAlpha
+            ) {
                 params.x = item.x
                 params.y = item.y
                 params.width = nextWidth
                 params.height = nextHeight
+                params.flags = nextFlags
+                params.alpha = nextAlpha
                 root.updateWindow()
             }
         }
@@ -313,5 +333,15 @@ class FloatingLive2DOverlayService : Service() {
         } else {
             WindowManager.LayoutParams.TYPE_PHONE
         }
+
+        private fun overlayWindowFlags(touchThrough: Boolean): Int {
+            var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            if (touchThrough) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            return flags
+        }
+
+        private fun overlayWindowAlpha(touchThrough: Boolean): Float =
+            if (touchThrough && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 0.8f else 1f
     }
 }

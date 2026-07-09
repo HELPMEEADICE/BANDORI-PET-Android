@@ -1138,7 +1138,7 @@ private fun FloatingOverlaySettingsCard(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("悬浮窗设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "可添加多个 Live2D 模型到桌面悬浮窗。锁定时不能拖动或双指放大，始终可以点击模型部位触发动作。",
+                    "可添加多个 Live2D 模型到桌面悬浮窗。锁定时不能拖动或双指放大；开启穿透后点击会传给下层应用。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1202,6 +1202,30 @@ private fun FloatingOverlaySettingsCard(
                 Switch(
                     checked = settings.locked,
                     onCheckedChange = { locked -> onSettingsChanged(settings.copy(locked = locked)) },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("悬浮窗穿透", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.touchThrough) {
+                            "点击会穿过悬浮窗传给下层应用，模型本身不能响应点击。"
+                        } else {
+                            "关闭时悬浮窗可正常接收点击。"
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = settings.touchThrough,
+                    onCheckedChange = { touchThrough ->
+                        onSettingsChanged(settings.copy(touchThrough = touchThrough))
+                    },
                 )
             }
             Row(
@@ -1486,7 +1510,7 @@ private fun RenderSettingsCard(
                             )
                         },
                     ) {
-                        Text(if (settings.backgroundUri == null) "选择照片" else "更换")
+                        Text(if (settings.backgroundUri == null) "选择" else "更换")
                     }
                 }
                 if (settings.backgroundUri != null) {

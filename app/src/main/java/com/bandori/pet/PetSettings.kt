@@ -24,6 +24,7 @@ const val KEY_DYNAMIC_COLOR_ENABLED = "dynamic_color_enabled"
 const val KEY_DARK_MODE = "dark_mode"
 const val KEY_FLOATING_OVERLAY_ENABLED = "floating_overlay_enabled"
 const val KEY_FLOATING_OVERLAY_LOCKED = "floating_overlay_locked"
+const val KEY_FLOATING_OVERLAY_TOUCH_THROUGH = "floating_overlay_touch_through"
 const val KEY_FLOATING_OVERLAY_ITEMS = "floating_overlay_items"
 
 private const val DEFAULT_FLOATING_OVERLAY_X = 48
@@ -44,6 +45,7 @@ data class FloatingLive2DItem(
 data class FloatingOverlaySettings(
     val enabled: Boolean = false,
     val locked: Boolean = true,
+    val touchThrough: Boolean = false,
     val items: List<FloatingLive2DItem> = emptyList(),
 ) {
     fun save(context: Context) {
@@ -51,6 +53,7 @@ data class FloatingOverlaySettings(
             .edit()
             .putBoolean(KEY_FLOATING_OVERLAY_ENABLED, enabled)
             .putBoolean(KEY_FLOATING_OVERLAY_LOCKED, locked)
+            .putBoolean(KEY_FLOATING_OVERLAY_TOUCH_THROUGH, touchThrough)
             .putString(KEY_FLOATING_OVERLAY_ITEMS, encodeFloatingItems(items))
             .apply()
     }
@@ -61,6 +64,7 @@ data class FloatingOverlaySettings(
             return FloatingOverlaySettings(
                 enabled = prefs.getBoolean(KEY_FLOATING_OVERLAY_ENABLED, false),
                 locked = prefs.getBoolean(KEY_FLOATING_OVERLAY_LOCKED, true),
+                touchThrough = prefs.getBoolean(KEY_FLOATING_OVERLAY_TOUCH_THROUGH, false),
                 items = decodeFloatingItems(prefs.getString(KEY_FLOATING_OVERLAY_ITEMS, null)),
             )
         }
