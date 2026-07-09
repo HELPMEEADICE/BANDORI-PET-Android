@@ -1217,6 +1217,29 @@ private fun FloatingOverlaySettingsCard(
                     Text("添加")
                 }
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("重置悬浮窗位置", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "把所有悬浮窗移回默认位置，保留当前大小。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Button(
+                    enabled = settings.items.isNotEmpty(),
+                    onClick = {
+                        val next = resetFloatingLive2DItemPositions(appContext)
+                        onSettingsChanged(next)
+                    },
+                ) {
+                    Text("重置")
+                }
+            }
             if (settings.items.isEmpty()) {
                 Text(
                     "暂无悬浮窗模型。添加后会记住每个窗口最后的位置和大小。",

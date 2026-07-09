@@ -26,13 +26,19 @@ const val KEY_FLOATING_OVERLAY_ENABLED = "floating_overlay_enabled"
 const val KEY_FLOATING_OVERLAY_LOCKED = "floating_overlay_locked"
 const val KEY_FLOATING_OVERLAY_ITEMS = "floating_overlay_items"
 
+private const val DEFAULT_FLOATING_OVERLAY_X = 48
+private const val DEFAULT_FLOATING_OVERLAY_Y = 160
+private const val DEFAULT_FLOATING_OVERLAY_WIDTH = 360
+private const val DEFAULT_FLOATING_OVERLAY_HEIGHT = 520
+private const val FLOATING_OVERLAY_CASCADE_OFFSET = 36
+
 data class FloatingLive2DItem(
     val id: String,
     val model: ModelChoice,
-    val x: Int = 48,
-    val y: Int = 160,
-    val width: Int = 360,
-    val height: Int = 520,
+    val x: Int = DEFAULT_FLOATING_OVERLAY_X,
+    val y: Int = DEFAULT_FLOATING_OVERLAY_Y,
+    val width: Int = DEFAULT_FLOATING_OVERLAY_WIDTH,
+    val height: Int = DEFAULT_FLOATING_OVERLAY_HEIGHT,
 )
 
 data class FloatingOverlaySettings(
@@ -199,10 +205,22 @@ fun addFloatingLive2DItem(context: Context, model: ModelChoice): FloatingOverlay
     val item = FloatingLive2DItem(
         id = "${System.currentTimeMillis()}_$index",
         model = model,
-        x = 48 + index * 36,
-        y = 160 + index * 36,
+        x = DEFAULT_FLOATING_OVERLAY_X + index * FLOATING_OVERLAY_CASCADE_OFFSET,
+        y = DEFAULT_FLOATING_OVERLAY_Y + index * FLOATING_OVERLAY_CASCADE_OFFSET,
     )
     return settings.copy(items = settings.items + item).also { it.save(context) }
+}
+
+fun resetFloatingLive2DItemPositions(context: Context): FloatingOverlaySettings {
+    val settings = FloatingOverlaySettings.load(context)
+    return settings.copy(
+        items = settings.items.mapIndexed { index, item ->
+            item.copy(
+                x = DEFAULT_FLOATING_OVERLAY_X + index * FLOATING_OVERLAY_CASCADE_OFFSET,
+                y = DEFAULT_FLOATING_OVERLAY_Y + index * FLOATING_OVERLAY_CASCADE_OFFSET,
+            )
+        },
+    ).also { it.save(context) }
 }
 
 fun removeFloatingLive2DItem(context: Context, itemId: String): FloatingOverlaySettings {
@@ -301,10 +319,10 @@ private fun decodeFloatingItems(value: String?): List<FloatingLive2DItem> {
                     FloatingLive2DItem(
                         id = item.optString("id", "${System.currentTimeMillis()}_$index"),
                         model = model,
-                        x = item.optInt("x", 48),
-                        y = item.optInt("y", 160),
-                        width = item.optInt("width", 360).coerceIn(180, 1200),
-                        height = item.optInt("height", 520).coerceIn(240, 1600),
+                        x = item.optInt("x", DEFAULT_FLOATING_OVERLAY_X),
+                        y = item.optInt("y", DEFAULT_FLOATING_OVERLAY_Y),
+                        width = item.optInt("width", DEFAULT_FLOATING_OVERLAY_WIDTH).coerceIn(180, 1200),
+                        height = item.optInt("height", DEFAULT_FLOATING_OVERLAY_HEIGHT).coerceIn(240, 1600),
                     ),
                 )
             }

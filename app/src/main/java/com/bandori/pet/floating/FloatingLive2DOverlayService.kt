@@ -94,7 +94,8 @@ class FloatingLive2DOverlayService : Service() {
             item.width.coerceIn(MIN_WIDTH, MAX_WIDTH),
             item.height.coerceIn(MIN_HEIGHT, MAX_HEIGHT),
             overlayWindowType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
