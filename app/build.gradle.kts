@@ -28,8 +28,24 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("bandori.jks")
+            storePassword = "bandori123"
+            keyAlias = "bandori"
+            keyPassword = "bandori123"
+        }
+    }
+
     buildFeatures {
         compose = true
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
 
     externalNativeBuild {
