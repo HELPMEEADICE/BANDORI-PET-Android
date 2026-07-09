@@ -101,6 +101,7 @@ import com.bandori.pet.data.CharacterInfo
 import com.bandori.pet.data.DataRepository
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.ZstModelArchive
+import com.bandori.pet.floating.FloatingLive2DOverlayService
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import com.bandori.pet.wallpaper.Live2DWallpaperService
@@ -291,6 +292,7 @@ private fun BandoriPetApp(
                                 onModelAssetsChanged = { modelAssetsVersion += 1 },
                             )
                             Screen.Settings -> SettingsScreen(
+                                selectedModel = selectedModel,
                                 themeSettings = themeSettings,
                                 onThemeSettingsChanged = onThemeSettingsChanged,
                                 renderSettings = renderSettings,
@@ -937,6 +939,7 @@ private fun formatBytes(bytes: Double): String {
 
 @Composable
 private fun SettingsScreen(
+    selectedModel: ModelChoice?,
     themeSettings: ThemeSettings,
     onThemeSettingsChanged: (ThemeSettings) -> Unit,
     renderSettings: RenderSettings,
@@ -946,6 +949,13 @@ private fun SettingsScreen(
     val appContext = context.applicationContext
     var wallpaperEnabled by remember { mutableStateOf(isWallpaperEnabled(appContext)) }
     var wallpaperBackgroundUri by remember { mutableStateOf(loadWallpaperBackgroundUri(appContext)) }
+    var floatingOverlaySettings by remember { mutableStateOf(FloatingOverlaySettings.load(appContext)) }
+
+    fun updateFloatingOverlaySettings(settings: FloatingOverlaySettings) {
+        floatingOverlaySettings = settings
+        settings.save(appContext)
+        FloatingLive2DOverlayService.sync(appContext)
+    }
 
     Column(
         modifier = Modifier
@@ -959,7 +969,16 @@ private fun SettingsScreen(
         )
         RenderSettingsCard(
             settings = renderSettings,
-            onSettingsChanged = onRenderSettingsChanged,
+            onSettingsChanged = { settings ->
+                onRenderSettingsChanged(settings)
+                FloatingLive2DOverlayService.sync(appContext)
+            },
+        )
+        FloatingOverlaySettingsCard(
+            selectedModel = selectedModel,
+            settings = floatingOverlaySettings,
+            onSettingsChanged = ::updateFloatingOverlaySettings,
+            onRefreshSettings = { floatingOverlaySettings = FloatingOverlaySettings.load(appContext) },
         )
         WallpaperSettingsCard(
             enabled = wallpaperEnabled,
@@ -1079,6 +1098,181 @@ private fun openLiveWallpaperPicker(context: android.content.Context) {
     val fallbackIntent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
     runCatching { context.startActivity(changeIntent) }
         .recoverCatching { context.startActivity(fallbackIntent) }
+}
+
+@Composable
+private fun FloatingOverlaySettingsCard(
+    selectedModel: ModelChoice?,
+    settings: FloatingOverlaySettings,
+    onSettingsChanged: (FloatingOverlaySettings) -> Unit,
+    onRefreshSettings: () -> Unit,
+) {
+    val context = LocalContext.current
+    val appContext = context.applicationContext
+    var hasOverlayPermission by remember { mutableStateOf(FloatingLive2DOverlayService.canDrawOverlays(appContext)) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        hasOverlayPermission = FloatingLive2DOverlayService.canDrawOverlays(appContext)
+        onRefreshSettings()
+        FloatingLive2DOverlayService.sync(appContext)
+    }
+
+    fun requestPermission() {
+        permissionLauncher.launch(FloatingLive2DOverlayService.permissionIntent(context))
+    }
+
+    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("悬浮窗设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "可添加多个 Live2D 模型到桌面悬浮窗。锁定时不能拖动或双指放大，始终可以点击模型部位触发动作。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (!hasOverlayPermission) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("悬浮窗权限", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "需要允许显示在其他应用上层后才能创建悬浮窗。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Button(onClick = ::requestPermission) { Text("去授权") }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("开启悬浮窗", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        when {
+                            !hasOverlayPermission -> "请先授予悬浮窗权限。"
+                            settings.items.isEmpty() -> "先添加至少一个模型。"
+                            settings.enabled -> "已显示 ${settings.items.size} 个 Live2D 悬浮窗。"
+                            else -> "开启后显示下方列表中的模型。"
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = settings.enabled,
+                    enabled = hasOverlayPermission,
+                    onCheckedChange = { enabled ->
+                        onSettingsChanged(settings.copy(enabled = enabled))
+                    },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("悬浮窗锁定", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.locked) "当前不能拖动或缩放悬浮窗。" else "当前可单指拖动、双指缩放悬浮窗。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = settings.locked,
+                    onCheckedChange = { locked -> onSettingsChanged(settings.copy(locked = locked)) },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("添加当前模型", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        selectedModel?.title ?: "请先在“模型”页选择一个 Live2D 模型。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Button(
+                    enabled = selectedModel != null,
+                    onClick = {
+                        val model = selectedModel ?: return@Button
+                        val next = addFloatingLive2DItem(appContext, model)
+                        onSettingsChanged(next)
+                    },
+                ) {
+                    Text("添加")
+                }
+            }
+            if (settings.items.isEmpty()) {
+                Text(
+                    "暂无悬浮窗模型。添加后会记住每个窗口最后的位置和大小。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    settings.items.forEachIndexed { index, item ->
+                        FloatingOverlayItemRow(
+                            index = index,
+                            item = item,
+                            onRemove = {
+                                val next = removeFloatingLive2DItem(appContext, item.id)
+                                onSettingsChanged(next)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingOverlayItemRow(
+    index: Int,
+    item: FloatingLive2DItem,
+    onRemove: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = "${index + 1}. ${item.model.title}",
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "位置 ${item.x}, ${item.y} · 大小 ${item.width}×${item.height}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            TextButton(onClick = onRemove) { Text("移除") }
+        }
+    }
 }
 
 @Composable

@@ -6,6 +6,8 @@ import android.net.Uri
 import com.bandori.pet.data.DataRepository
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.live2d.Live2DTransform
+import org.json.JSONArray
+import org.json.JSONObject
 
 const val SETTINGS_PREFS = "bandori_pet_settings"
 const val KEY_FPS_LIMIT = "fps_limit"
@@ -20,6 +22,44 @@ const val KEY_WALLPAPER_OFFSET_Y = "wallpaper_offset_y"
 const val KEY_WALLPAPER_SCALE = "wallpaper_scale"
 const val KEY_DYNAMIC_COLOR_ENABLED = "dynamic_color_enabled"
 const val KEY_DARK_MODE = "dark_mode"
+const val KEY_FLOATING_OVERLAY_ENABLED = "floating_overlay_enabled"
+const val KEY_FLOATING_OVERLAY_LOCKED = "floating_overlay_locked"
+const val KEY_FLOATING_OVERLAY_ITEMS = "floating_overlay_items"
+
+data class FloatingLive2DItem(
+    val id: String,
+    val model: ModelChoice,
+    val x: Int = 48,
+    val y: Int = 160,
+    val width: Int = 360,
+    val height: Int = 520,
+)
+
+data class FloatingOverlaySettings(
+    val enabled: Boolean = false,
+    val locked: Boolean = true,
+    val items: List<FloatingLive2DItem> = emptyList(),
+) {
+    fun save(context: Context) {
+        context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_FLOATING_OVERLAY_ENABLED, enabled)
+            .putBoolean(KEY_FLOATING_OVERLAY_LOCKED, locked)
+            .putString(KEY_FLOATING_OVERLAY_ITEMS, encodeFloatingItems(items))
+            .apply()
+    }
+
+    companion object {
+        fun load(context: Context): FloatingOverlaySettings {
+            val prefs = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            return FloatingOverlaySettings(
+                enabled = prefs.getBoolean(KEY_FLOATING_OVERLAY_ENABLED, false),
+                locked = prefs.getBoolean(KEY_FLOATING_OVERLAY_LOCKED, true),
+                items = decodeFloatingItems(prefs.getString(KEY_FLOATING_OVERLAY_ITEMS, null)),
+            )
+        }
+    }
+}
 
 enum class DarkModeSetting(val value: String) {
     On("on"),
@@ -153,6 +193,41 @@ fun setWallpaperEnabled(context: Context, enabled: Boolean) {
         .apply()
 }
 
+fun addFloatingLive2DItem(context: Context, model: ModelChoice): FloatingOverlaySettings {
+    val settings = FloatingOverlaySettings.load(context)
+    val index = settings.items.size
+    val item = FloatingLive2DItem(
+        id = "${System.currentTimeMillis()}_$index",
+        model = model,
+        x = 48 + index * 36,
+        y = 160 + index * 36,
+    )
+    return settings.copy(items = settings.items + item).also { it.save(context) }
+}
+
+fun removeFloatingLive2DItem(context: Context, itemId: String): FloatingOverlaySettings {
+    val settings = FloatingOverlaySettings.load(context)
+    return settings.copy(items = settings.items.filterNot { it.id == itemId }).also { it.save(context) }
+}
+
+fun saveFloatingLive2DItemBounds(context: Context, itemId: String, x: Int, y: Int, width: Int, height: Int) {
+    val settings = FloatingOverlaySettings.load(context)
+    settings.copy(
+        items = settings.items.map { item ->
+            if (item.id == itemId) {
+                item.copy(
+                    x = x,
+                    y = y,
+                    width = width.coerceIn(180, 1200),
+                    height = height.coerceIn(240, 1600),
+                )
+            } else {
+                item
+            }
+        },
+    ).save(context)
+}
+
 fun loadWallpaperBackgroundUri(context: Context): String? =
     context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .getString(KEY_WALLPAPER_BACKGROUND_URI, null)
@@ -186,4 +261,53 @@ fun saveWallpaperTransform(context: Context, transform: Live2DTransform) {
         .putFloat(KEY_WALLPAPER_OFFSET_Y, transform.offsetY)
         .putFloat(KEY_WALLPAPER_SCALE, transform.scale.coerceIn(0.4f, 3f))
         .apply()
+}
+
+private fun encodeFloatingItems(items: List<FloatingLive2DItem>): String {
+    val array = JSONArray()
+    items.forEach { item ->
+        array.put(
+            JSONObject()
+                .put("id", item.id)
+                .put("characterId", item.model.characterId)
+                .put("characterName", item.model.characterName)
+                .put("costumeId", item.model.costumeId)
+                .put("costumeName", item.model.costumeName)
+                .put("modelAssetPath", item.model.modelAssetPath)
+                .put("x", item.x)
+                .put("y", item.y)
+                .put("width", item.width)
+                .put("height", item.height),
+        )
+    }
+    return array.toString()
+}
+
+private fun decodeFloatingItems(value: String?): List<FloatingLive2DItem> {
+    if (value.isNullOrBlank()) return emptyList()
+    return runCatching {
+        val array = JSONArray(value)
+        buildList {
+            for (index in 0 until array.length()) {
+                val item = array.getJSONObject(index)
+                val model = ModelChoice(
+                    characterId = item.getString("characterId"),
+                    characterName = item.getString("characterName"),
+                    costumeId = item.getString("costumeId"),
+                    costumeName = item.getString("costumeName"),
+                    modelAssetPath = item.getString("modelAssetPath"),
+                )
+                add(
+                    FloatingLive2DItem(
+                        id = item.optString("id", "${System.currentTimeMillis()}_$index"),
+                        model = model,
+                        x = item.optInt("x", 48),
+                        y = item.optInt("y", 160),
+                        width = item.optInt("width", 360).coerceIn(180, 1200),
+                        height = item.optInt("height", 520).coerceIn(240, 1600),
+                    ),
+                )
+            }
+        }
+    }.getOrDefault(emptyList())
 }
