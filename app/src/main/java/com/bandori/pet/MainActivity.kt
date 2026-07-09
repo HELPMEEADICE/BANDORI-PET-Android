@@ -923,7 +923,9 @@ private fun SettingsScreen(
     onRenderSettingsChanged: (RenderSettings) -> Unit,
 ) {
     val context = LocalContext.current
-    var wallpaperEnabled by remember { mutableStateOf(isWallpaperEnabled(context.applicationContext)) }
+    val appContext = context.applicationContext
+    var wallpaperEnabled by remember { mutableStateOf(isWallpaperEnabled(appContext)) }
+    var wallpaperBackgroundUri by remember { mutableStateOf(loadWallpaperBackgroundUri(appContext)) }
 
     Column(
         modifier = Modifier
@@ -937,13 +939,16 @@ private fun SettingsScreen(
         )
         WallpaperSettingsCard(
             enabled = wallpaperEnabled,
-            settings = renderSettings,
+            backgroundUri = wallpaperBackgroundUri,
             onEnabledChanged = { enabled ->
                 wallpaperEnabled = enabled
-                setWallpaperEnabled(context.applicationContext, enabled)
+                setWallpaperEnabled(appContext, enabled)
                 if (enabled) openLiveWallpaperPicker(context)
             },
-            onSettingsChanged = onRenderSettingsChanged,
+            onBackgroundChanged = { uri ->
+                wallpaperBackgroundUri = uri
+                saveWallpaperBackgroundUri(appContext, uri)
+            },
             onAdjustPosition = {
                 context.startActivity(Intent(context, WallpaperAdjustActivity::class.java))
             },
@@ -967,16 +972,16 @@ private fun openLiveWallpaperPicker(context: android.content.Context) {
 @Composable
 private fun WallpaperSettingsCard(
     enabled: Boolean,
-    settings: RenderSettings,
+    backgroundUri: String?,
     onEnabledChanged: (Boolean) -> Unit,
-    onSettingsChanged: (RenderSettings) -> Unit,
+    onBackgroundChanged: (String?) -> Unit,
     onAdjustPosition: () -> Unit,
 ) {
     val context = LocalContext.current
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         persistBackgroundUri(context.applicationContext, uri)
-        onSettingsChanged(settings.copy(backgroundUri = uri.toString()))
+        onBackgroundChanged(uri.toString())
     }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
@@ -1030,7 +1035,7 @@ private fun WallpaperSettingsCard(
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("壁纸背景", fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (settings.backgroundUri == null) "使用默认透明背景。" else "已选择照片，桌面壁纸和 Live2D 预览会共用。",
+                            if (backgroundUri == null) "使用默认透明背景。" else "已选择照片，只应用到桌面壁纸。",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -1042,11 +1047,11 @@ private fun WallpaperSettingsCard(
                             )
                         },
                     ) {
-                        Text(if (settings.backgroundUri == null) "选择" else "更换")
+                        Text(if (backgroundUri == null) "选择" else "更换")
                     }
                 }
-                if (settings.backgroundUri != null) {
-                    TextButton(onClick = { onSettingsChanged(settings.copy(backgroundUri = null)) }) {
+                if (backgroundUri != null) {
+                    TextButton(onClick = { onBackgroundChanged(null) }) {
                         Text("清除背景")
                     }
                 }
@@ -1060,6 +1065,13 @@ private fun RenderSettingsCard(
     settings: RenderSettings,
     onSettingsChanged: (RenderSettings) -> Unit,
 ) {
+    val context = LocalContext.current
+    val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        persistBackgroundUri(context.applicationContext, uri)
+        onSettingsChanged(settings.copy(backgroundUri = uri.toString()))
+    }
+
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1110,6 +1122,36 @@ private fun RenderSettingsCard(
                     checked = settings.vsyncEnabled,
                     onCheckedChange = { enabled -> onSettingsChanged(settings.copy(vsyncEnabled = enabled)) },
                 )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Live2D 背景", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (settings.backgroundUri == null) "使用默认渐变背景。" else "已选择照片，只应用到 Live2D 预览。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            backgroundPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                    ) {
+                        Text(if (settings.backgroundUri == null) "选择照片" else "更换")
+                    }
+                }
+                if (settings.backgroundUri != null) {
+                    TextButton(onClick = { onSettingsChanged(settings.copy(backgroundUri = null)) }) {
+                        Text("清除背景")
+                    }
+                }
             }
         }
     }

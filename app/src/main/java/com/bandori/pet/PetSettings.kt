@@ -11,6 +11,7 @@ const val SETTINGS_PREFS = "bandori_pet_settings"
 const val KEY_FPS_LIMIT = "fps_limit"
 const val KEY_VSYNC_ENABLED = "vsync_enabled"
 const val KEY_LIVE2D_BACKGROUND_URI = "live2d_background_uri"
+const val KEY_WALLPAPER_BACKGROUND_URI = "wallpaper_background_uri"
 const val KEY_SELECTED_CHARACTER_ID = "selected_character_id"
 const val KEY_SELECTED_MODEL_ASSET_PATH = "selected_model_asset_path"
 const val KEY_WALLPAPER_ENABLED = "wallpaper_enabled"
@@ -107,6 +108,23 @@ fun setWallpaperEnabled(context: Context, enabled: Boolean) {
     context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .edit()
         .putBoolean(KEY_WALLPAPER_ENABLED, enabled)
+        .apply()
+}
+
+fun loadWallpaperBackgroundUri(context: Context): String? =
+    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getString(KEY_WALLPAPER_BACKGROUND_URI, null)
+
+fun saveWallpaperBackgroundUri(context: Context, uri: String?) {
+    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .apply {
+            if (uri.isNullOrBlank()) {
+                remove(KEY_WALLPAPER_BACKGROUND_URI)
+            } else {
+                putString(KEY_WALLPAPER_BACKGROUND_URI, uri)
+            }
+        }
         .apply()
 }
 

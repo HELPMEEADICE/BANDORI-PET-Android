@@ -73,7 +73,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
     val appContext = context.applicationContext
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
     var transform by remember { mutableStateOf(loadWallpaperTransform(appContext)) }
-    val backgroundUri = remember { RenderSettings.load(appContext).backgroundUri }
+    val backgroundUri = remember { loadWallpaperBackgroundUri(appContext) }
     var status by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {

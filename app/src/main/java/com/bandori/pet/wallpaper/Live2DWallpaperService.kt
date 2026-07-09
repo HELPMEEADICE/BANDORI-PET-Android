@@ -7,6 +7,7 @@ import android.view.SurfaceHolder
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.isWallpaperEnabled
 import com.bandori.pet.loadPersistedModelChoice
+import com.bandori.pet.loadWallpaperBackgroundUri
 import com.bandori.pet.loadWallpaperTransform
 import com.bandori.pet.live2d.AssetSync
 import com.bandori.pet.live2d.NativeLive2D
@@ -93,6 +94,7 @@ class Live2DWallpaperService : WallpaperService() {
                 .onFailure { Log.e("BandoriPet", "Failed to load wallpaper model", it) }
                 .getOrNull() ?: return
             val settings = RenderSettings.load(applicationContext)
+            val wallpaperBackgroundUri = loadWallpaperBackgroundUri(applicationContext)
             val generation = ++loadGeneration
             loading = true
             scope.launch {
@@ -111,11 +113,11 @@ class Live2DWallpaperService : WallpaperService() {
                                 settings.fpsLimit,
                                 settings.vsyncEnabled,
                             )
-                            NativeLive2D.setBackground(applicationContext, handle, settings.backgroundUri)
+                            NativeLive2D.setBackground(applicationContext, handle, wallpaperBackgroundUri)
                             applyWallpaperTransform()
                         } else {
                             NativeLive2D.setRenderOptions(handle, settings.fpsLimit, settings.vsyncEnabled)
-                            NativeLive2D.setBackground(applicationContext, handle, settings.backgroundUri)
+                            NativeLive2D.setBackground(applicationContext, handle, wallpaperBackgroundUri)
                         }
                         if (handle != 0L) {
                             NativeLive2D.loadModel(
