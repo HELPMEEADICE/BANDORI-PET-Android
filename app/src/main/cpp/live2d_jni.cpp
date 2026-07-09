@@ -9,6 +9,7 @@
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -33,6 +34,7 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "BandoriPet", __VA_ARGS__)
 
 static constexpr int MAX_RENDER_EDGE = 1280;
+static constexpr float GAZE_FOLLOW_EASING_PER_SECOND = 8.0f;
 
 struct lua_State;
 typedef int (*lua_CFunction)(lua_State* L);
@@ -94,6 +96,9 @@ struct Renderer {
     std::atomic<bool> pendingLookAt{false};
     std::atomic<float> lookAtXRatio{0.5f};
     std::atomic<float> lookAtYRatio{0.5f};
+    bool lookAtActive = false;
+    float smoothedLookAtXRatio = 0.5f;
+    float smoothedLookAtYRatio = 0.5f;
     std::atomic<bool> pendingTransform{false};
     std::atomic<bool> pendingRenderOptions{false};
     std::atomic<int> fpsLimit{60};
@@ -951,8 +956,15 @@ end
 static void renderLoop(Renderer* renderer) {
     if (!initEgl(renderer) || !initLua(renderer)) return;
 
+    auto previousFrameStart = std::chrono::steady_clock::now();
     while (renderer->running.load()) {
         const auto frameStart = std::chrono::steady_clock::now();
+        const float deltaSeconds = std::clamp(
+            std::chrono::duration<float>(frameStart - previousFrameStart).count(),
+            0.0f,
+            0.1f
+        );
+        previousFrameStart = frameStart;
         std::string model;
         std::unordered_map<std::string, std::string> resources;
         std::vector<uint32_t> backgroundPixels;
@@ -999,6 +1011,9 @@ static void renderLoop(Renderer* renderer) {
         }
         if (!model.empty()) {
             renderer->resources = std::move(resources);
+            renderer->lookAtActive = false;
+            renderer->smoothedLookAtXRatio = 0.5f;
+            renderer->smoothedLookAtYRatio = 0.5f;
             getGlobal(renderer, "__bp_load");
             renderer->luaApi.pushString(renderer->lua, model.c_str());
             renderer->luaApi.pushNumber(renderer->lua, width);
@@ -1012,9 +1027,23 @@ static void renderLoop(Renderer* renderer) {
             callLua(renderer, "__bp_touch", 2);
         }
         if (shouldLookAt) {
+            renderer->lookAtActive = true;
+        }
+        if (renderer->lookAtActive) {
+            const float easing = std::clamp(deltaSeconds * GAZE_FOLLOW_EASING_PER_SECOND, 0.0f, 1.0f);
+            renderer->smoothedLookAtXRatio += (lookAtXRatio - renderer->smoothedLookAtXRatio) * easing;
+            renderer->smoothedLookAtYRatio += (lookAtYRatio - renderer->smoothedLookAtYRatio) * easing;
+
+            if (std::abs(lookAtXRatio - renderer->smoothedLookAtXRatio) < 0.001f &&
+                std::abs(lookAtYRatio - renderer->smoothedLookAtYRatio) < 0.001f) {
+                renderer->smoothedLookAtXRatio = lookAtXRatio;
+                renderer->smoothedLookAtYRatio = lookAtYRatio;
+                renderer->lookAtActive = false;
+            }
+
             getGlobal(renderer, "__bp_look_at");
-            renderer->luaApi.pushNumber(renderer->lua, lookAtXRatio);
-            renderer->luaApi.pushNumber(renderer->lua, lookAtYRatio);
+            renderer->luaApi.pushNumber(renderer->lua, renderer->smoothedLookAtXRatio);
+            renderer->luaApi.pushNumber(renderer->lua, renderer->smoothedLookAtYRatio);
             callLua(renderer, "__bp_look_at", 2);
         }
         if (shouldTransform) {
