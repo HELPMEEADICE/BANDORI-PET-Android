@@ -56,7 +56,7 @@ class DataRepository(private val context: Context) {
 
     fun assetExists(path: String): Boolean = runCatching {
         context.assets.open(path).use { true }
-    }.getOrDefault(false)
+    }.getOrDefault(false) || ZstModelArchive.assetExists(context, path)
 
     fun availableModels(character: CharacterInfo): List<ModelChoice> {
         val costumeChoices = if (character.costumes.isEmpty()) {
@@ -66,8 +66,8 @@ class DataRepository(private val context: Context) {
         }
 
         val characterBase = "models/${character.id}"
-        val localCostumes = runCatching { context.assets.list(characterBase).orEmpty().sorted() }
-            .getOrDefault(emptyList())
+        val localCostumes = (runCatching { context.assets.list(characterBase).orEmpty().toList() }
+            .getOrDefault(emptyList()) + ZstModelArchive.listCostumes(context, character.id)).distinct().sorted()
         for (costumeId in localCostumes) {
             if (!costumeChoices.containsKey(costumeId)) {
                 costumeChoices[costumeId] = costumeId
@@ -100,10 +100,16 @@ class DataRepository(private val context: Context) {
         files.firstOrNull { it == "model.json" }
             ?: files.firstOrNull { it.endsWith(".model.json") && !it.endsWith(".model3.json") }
     }.getOrNull()?.let { "$base/$it" }
+        ?: ZstModelArchive.listFiles(context, base)
+            .firstOrNull { it == "model.json" || (it.endsWith(".model.json") && !it.endsWith(".model3.json")) }
+            ?.let { "$base/$it" }
 
     private fun findModel3Json(base: String): String? = runCatching {
         context.assets.list(base).orEmpty().firstOrNull { it.endsWith(".model3.json") }?.let { "$base/$it" }
     }.getOrNull()
+        ?: ZstModelArchive.listFiles(context, base)
+            .firstOrNull { it.endsWith(".model3.json") }
+            ?.let { "$base/$it" }
 
     private fun readAssetText(path: String): String = context.assets.open(path).bufferedReader().use { it.readText() }
 }

@@ -75,6 +75,7 @@ import com.bandori.pet.data.Band
 import com.bandori.pet.data.CharacterInfo
 import com.bandori.pet.data.DataRepository
 import com.bandori.pet.data.ModelChoice
+import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import kotlinx.coroutines.delay
@@ -919,7 +920,8 @@ private fun AssetImage(path: String?, modifier: Modifier, contentScale: ContentS
         path?.let {
             runCatching {
                 context.assets.open(it).use { input -> BitmapFactory.decodeStream(input)?.asImageBitmap() }
-            }.getOrNull()
+            }.getOrNull() ?: ZstModelArchive.readLogicalPath(context, it)
+                ?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
         }
     }
     if (bitmap != null) {

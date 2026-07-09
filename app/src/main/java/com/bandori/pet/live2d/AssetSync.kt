@@ -1,6 +1,7 @@
 package com.bandori.pet.live2d
 
 import android.content.Context
+import com.bandori.pet.data.ZstModelArchive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -11,12 +12,17 @@ object AssetSync {
         val runtimeRoot = File(root, "third_party/Live2D-v2-Lua")
         copyRuntimeIfNeeded(context, runtimeRoot)
 
-        val modelDir = modelAssetPath.substringBeforeLast('/')
-        copyTree(context, modelDir, File(root, modelDir))
+        val archive = ZstModelArchive.readModelPrefix(context, modelAssetPath)
+        if (archive == null) {
+            val modelDir = modelAssetPath.substringBeforeLast('/')
+            copyTree(context, modelDir, File(root, modelDir))
+        }
 
         PreparedModel(
             runtimeRoot = runtimeRoot.absolutePath,
-            modelPath = File(root, modelAssetPath).absolutePath,
+            modelPath = archive?.modelPath ?: File(root, modelAssetPath).absolutePath,
+            resourcePaths = archive?.resources?.keys?.toList().orEmpty(),
+            resourceBytes = archive?.resources?.values?.toList().orEmpty(),
         )
     }
 
@@ -50,4 +56,6 @@ object AssetSync {
 data class PreparedModel(
     val runtimeRoot: String,
     val modelPath: String,
+    val resourcePaths: List<String> = emptyList(),
+    val resourceBytes: List<ByteArray> = emptyList(),
 )
