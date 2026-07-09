@@ -1790,7 +1790,7 @@ private fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, co
 }
 
 @Composable
-private fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale) {
+internal fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale) {
     val context = LocalContext.current
     val bitmap = remember(uri) {
         uri?.let {

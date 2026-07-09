@@ -30,14 +30,6 @@
 #define EGL_CONTEXT_CLIENT_VERSION 0x3098
 #endif
 
-#ifndef EGL_CONTEXT_MAJOR_VERSION_KHR
-#define EGL_CONTEXT_MAJOR_VERSION_KHR 0x3098
-#endif
-
-#ifndef EGL_CONTEXT_MINOR_VERSION_KHR
-#define EGL_CONTEXT_MINOR_VERSION_KHR 0x30FB
-#endif
-
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "BandoriPet", __VA_ARGS__)
 
 static constexpr int MAX_RENDER_EDGE = 1280;
