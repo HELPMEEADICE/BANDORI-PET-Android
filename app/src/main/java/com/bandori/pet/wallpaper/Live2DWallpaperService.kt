@@ -30,15 +30,17 @@ class Live2DWallpaperService : WallpaperService() {
         private var width = 1
         private var height = 1
         private var loadGeneration = 0
+        private var surfaceHolderRef: SurfaceHolder? = null
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
+            surfaceHolderRef = surfaceHolder
             setTouchEventsEnabled(true)
             surfaceHolder.addCallback(this)
         }
 
         override fun onDestroy() {
-            holder.removeCallback(this)
+            surfaceHolderRef?.removeCallback(this)
             stopRenderer()
             scope.cancel()
             super.onDestroy()
@@ -85,7 +87,7 @@ class Live2DWallpaperService : WallpaperService() {
                 stopRenderer()
                 return
             }
-            val surface = holder.surface ?: return
+            val surface = surfaceHolderRef?.surface ?: return
             if (!surface.isValid) return
             val model = runCatching { loadPersistedModelChoice(applicationContext) }
                 .onFailure { Log.e("BandoriPet", "Failed to load wallpaper model", it) }
@@ -96,12 +98,13 @@ class Live2DWallpaperService : WallpaperService() {
             scope.launch {
                 runCatching { AssetSync.prepareModel(applicationContext, model.modelAssetPath) }
                     .onSuccess { prepared ->
-                        if (generation != loadGeneration || !visible || !surfaceReady || !holder.surface.isValid) return@onSuccess
+                        val activeSurface = surfaceHolderRef?.surface ?: return@onSuccess
+                        if (generation != loadGeneration || !visible || !surfaceReady || !activeSurface.isValid) return@onSuccess
                         if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
                             destroyHandle()
                             runtimeRoot = prepared.runtimeRoot
                             handle = NativeLive2D.create(
-                                holder.surface,
+                                activeSurface,
                                 prepared.runtimeRoot,
                                 width,
                                 height,
