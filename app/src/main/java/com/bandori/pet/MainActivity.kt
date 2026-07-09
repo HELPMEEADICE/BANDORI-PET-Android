@@ -9,6 +9,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -1008,7 +1009,7 @@ private fun RenderSettingsCard(
     onSettingsChanged: (RenderSettings) -> Unit,
 ) {
     val context = LocalContext.current
-    val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         persistBackgroundUri(context.applicationContext, uri)
         onSettingsChanged(settings.copy(backgroundUri = uri.toString()))
@@ -1079,7 +1080,13 @@ private fun RenderSettingsCard(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    Button(onClick = { backgroundPicker.launch(arrayOf("image/*")) }) {
+                    Button(
+                        onClick = {
+                            backgroundPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                    ) {
                         Text(if (settings.backgroundUri == null) "选择照片" else "更换")
                     }
                 }
