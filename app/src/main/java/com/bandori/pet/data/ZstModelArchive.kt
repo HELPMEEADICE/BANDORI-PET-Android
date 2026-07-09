@@ -34,7 +34,11 @@ object ZstModelArchive {
         (bundledCharacters + downloadedCharacters).filter { it.isNotBlank() }.distinct().sorted()
     }.getOrDefault(emptyList())
 
-    fun downloadCharacter(context: Context, characterId: String): File {
+    fun downloadCharacter(
+        context: Context,
+        characterId: String,
+        onProgress: ((DownloadProgress) -> Unit)? = null,
+    ): File {
         val target = downloadedArchiveFile(context, characterId)
         val parent = target.parentFile ?: throw IOException("无法创建模型下载目录")
         if (!parent.exists() && !parent.mkdirs()) throw IOException("无法创建模型下载目录")
@@ -48,8 +52,38 @@ object ZstModelArchive {
         try {
             val code = connection.responseCode
             if (code !in 200..299) throw IOException("下载失败：HTTP $code")
+            val totalBytes = connection.contentLengthLong.takeIf { it > 0 } ?: -1L
             connection.inputStream.use { input ->
-                temp.outputStream().use { output -> input.copyTo(output) }
+                temp.outputStream().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    val startedAt = System.nanoTime()
+                    var lastReportAt = 0L
+                    var downloadedBytes = 0L
+
+                    fun reportProgress(force: Boolean = false) {
+                        val now = System.nanoTime()
+                        if (!force && now - lastReportAt < 250_000_000L) return
+                        val elapsedSeconds = ((now - startedAt).coerceAtLeast(1L)) / 1_000_000_000.0
+                        onProgress?.invoke(
+                            DownloadProgress(
+                                downloadedBytes = downloadedBytes,
+                                totalBytes = totalBytes,
+                                bytesPerSecond = downloadedBytes / elapsedSeconds,
+                            )
+                        )
+                        lastReportAt = now
+                    }
+
+                    reportProgress(force = true)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        downloadedBytes += read.toLong()
+                        reportProgress()
+                    }
+                    reportProgress(force = true)
+                }
             }
         } finally {
             connection.disconnect()
@@ -303,6 +337,12 @@ object ZstModelArchive {
         val archiveAssetPath: String,
         val innerPath: String,
         val virtualPath: String,
+    )
+
+    data class DownloadProgress(
+        val downloadedBytes: Long,
+        val totalBytes: Long,
+        val bytesPerSecond: Double,
     )
 
     private data class LogicalLocation(

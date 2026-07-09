@@ -50,6 +50,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -96,6 +97,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val SETTINGS_PREFS = "bandori_pet_settings"
@@ -172,6 +174,13 @@ private enum class Live2DControlIcon {
     FullScreen,
     ExitFullScreen,
 }
+
+private data class ModelTransferState(
+    val characterId: String,
+    val characterName: String,
+    val actionLabel: String,
+    val progress: ZstModelArchive.DownloadProgress? = null,
+)
 
 @Composable
 private fun BandoriPetApp() {
@@ -590,23 +599,51 @@ private fun ModelScreen(
     val availableModels = remember(selectedCharacter, modelAssetsVersion) {
         selectedCharacter?.let { repository.availableModels(it) }.orEmpty()
     }
-    var downloadingModel by remember(selectedCharacter?.id) { mutableStateOf(false) }
+    var modelTransfer by remember { mutableStateOf<ModelTransferState?>(null) }
     var downloadMessage by remember(selectedCharacter?.id) { mutableStateOf<String?>(null) }
 
-    fun updateCharacterModel(character: CharacterInfo) {
+    fun startCharacterModelTransfer(
+        character: CharacterInfo,
+        actionLabel: String,
+        successMessage: String,
+        failureMessage: String,
+    ) {
+        if (modelTransfer != null) return
+        modelTransfer = ModelTransferState(
+            characterId = character.id,
+            characterName = character.display,
+            actionLabel = actionLabel,
+        )
+        if (selectedCharacterId == character.id) downloadMessage = null
         scope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    ZstModelArchive.downloadCharacter(context.applicationContext, character.id)
+                    ZstModelArchive.downloadCharacter(context.applicationContext, character.id) { progress ->
+                        scope.launch {
+                            modelTransfer = modelTransfer
+                                ?.takeIf { it.characterId == character.id }
+                                ?.copy(progress = progress)
+                        }
+                    }
                 }
             }
             result.onSuccess {
-                if (selectedCharacterId == character.id) downloadMessage = "更新完成，正在载入..."
+                if (selectedCharacterId == character.id) downloadMessage = successMessage
                 onModelAssetsChanged()
             }.onFailure { error ->
-                if (selectedCharacterId == character.id) downloadMessage = error.localizedMessage ?: "更新失败"
+                if (selectedCharacterId == character.id) downloadMessage = error.localizedMessage ?: failureMessage
             }
+            if (modelTransfer?.characterId == character.id) modelTransfer = null
         }
+    }
+
+    fun updateCharacterModel(character: CharacterInfo) {
+        startCharacterModelTransfer(
+            character = character,
+            actionLabel = "正在更新",
+            successMessage = "更新完成，正在载入...",
+            failureMessage = "更新失败",
+        )
     }
 
     fun deleteCharacterModel(character: CharacterInfo) {
@@ -704,6 +741,7 @@ private fun ModelScreen(
                             }
                             DropdownMenuItem(
                                 text = { Text("更新模型") },
+                                enabled = modelTransfer == null,
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Outlined.Refresh,
@@ -746,46 +784,44 @@ private fun ModelScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     ModelDownloadPrompt(
                         character = selectedCharacter,
-                        downloading = downloadingModel,
+                        transfer = modelTransfer,
                         message = downloadMessage,
                         onDownload = {
                             selectedCharacter?.let { character ->
-                                downloadingModel = true
-                                downloadMessage = null
-                                scope.launch {
-                                    val result = runCatching {
-                                        withContext(Dispatchers.IO) {
-                                            ZstModelArchive.downloadCharacter(context.applicationContext, character.id)
-                                        }
-                                    }
-                                    result.onSuccess {
-                                        downloadMessage = "下载完成，正在载入..."
-                                        onModelAssetsChanged()
-                                    }.onFailure { error ->
-                                        downloadMessage = error.localizedMessage ?: "下载失败"
-                                    }
-                                    downloadingModel = false
-                                }
+                                startCharacterModelTransfer(
+                                    character = character,
+                                    actionLabel = "正在下载",
+                                    successMessage = "下载完成，正在载入...",
+                                    failureMessage = "下载失败",
+                                )
                             }
                         },
                     )
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(156.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(availableModels, key = { it.modelAssetPath }) { model ->
-                        TextCard(
-                            title = model.costumeName,
-                            subtitle = model.costumeId,
-                            selected = selectedModel?.modelAssetPath == model.modelAssetPath,
-                            showMoc3Badge = model.isMoc3,
-                            onClick = { onModelSelected(model) },
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    modelTransfer?.let { transfer ->
+                        ModelTransferProgress(
+                            transfer = transfer,
+                            modifier = Modifier.fillMaxWidth(),
                         )
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(156.dp),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(availableModels, key = { it.modelAssetPath }) { model ->
+                            TextCard(
+                                title = model.costumeName,
+                                subtitle = model.costumeId,
+                                selected = selectedModel?.modelAssetPath == model.modelAssetPath,
+                                showMoc3Badge = model.isMoc3,
+                                onClick = { onModelSelected(model) },
+                            )
+                        }
                     }
                 }
             }
@@ -797,20 +833,21 @@ private fun ModelScreen(
 @Composable
 private fun ModelDownloadPrompt(
     character: CharacterInfo?,
-    downloading: Boolean,
+    transfer: ModelTransferState?,
     message: String?,
     onDownload: () -> Unit,
 ) {
+    val transferring = transfer != null
     Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Button(
-            enabled = character != null && !downloading,
+            enabled = character != null && !transferring,
             onClick = onDownload,
         ) {
-            if (downloading) {
+            if (transferring) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
                     strokeWidth = 2.dp,
@@ -818,8 +855,9 @@ private fun ModelDownloadPrompt(
                 )
                 Spacer(Modifier.width(10.dp))
             }
-            Text(if (downloading) "正在下载..." else "下载${character?.display ?: "角色"}模型")
+            Text(if (transferring) "${transfer?.actionLabel}..." else "下载${character?.display ?: "角色"}模型")
         }
+        transfer?.let { ModelTransferProgress(it) }
         message?.let {
             Text(
                 text = it,
@@ -828,6 +866,80 @@ private fun ModelDownloadPrompt(
             )
         }
     }
+}
+
+@Composable
+private fun ModelTransferProgress(
+    transfer: ModelTransferState,
+    modifier: Modifier = Modifier,
+) {
+    val progress = transfer.progress
+    val fraction = progress?.takeIf { it.totalBytes > 0 }
+        ?.let { (it.downloadedBytes.toFloat() / it.totalBytes.toFloat()).coerceIn(0f, 1f) }
+    ElevatedCard(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${transfer.actionLabel}${transfer.characterName}模型",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = progress?.let { formatTransferSpeed(it.bytesPerSecond) } ?: "连接中...",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (fraction != null) {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            Text(
+                text = progress?.let { formatTransferProgress(it) } ?: "等待服务器响应...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun formatTransferProgress(progress: ZstModelArchive.DownloadProgress): String {
+    val downloaded = formatBytes(progress.downloadedBytes.toDouble())
+    val total = progress.totalBytes.takeIf { it > 0 }?.let { formatBytes(it.toDouble()) } ?: "未知大小"
+    val percent = progress.totalBytes.takeIf { it > 0 }
+        ?.let { ((progress.downloadedBytes * 100.0) / it).roundToInt().coerceIn(0, 100) }
+    return if (percent != null) "$downloaded / $total，$percent%" else "$downloaded / $total"
+}
+
+private fun formatTransferSpeed(bytesPerSecond: Double): String = "${formatBytes(bytesPerSecond)}/s"
+
+private fun formatBytes(bytes: Double): String {
+    val units = arrayOf("B", "KB", "MB", "GB")
+    var value = bytes.coerceAtLeast(0.0)
+    var unitIndex = 0
+    while (value >= 1024.0 && unitIndex < units.lastIndex) {
+        value /= 1024.0
+        unitIndex += 1
+    }
+    val valueText = if (value >= 10.0 || unitIndex == 0) {
+        value.roundToInt().toString()
+    } else {
+        String.format(Locale.US, "%.1f", value)
+    }
+    return "$valueText ${units[unitIndex]}"
 }
 
 @Composable
