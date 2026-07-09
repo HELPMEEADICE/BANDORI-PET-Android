@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import androidx.activity.compose.ExperimentalActivityComposeApi
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -98,7 +100,9 @@ import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -205,6 +209,7 @@ private data class ModelTransferState(
     val progress: ZstModelArchive.DownloadProgress? = null,
 )
 
+@OptIn(ExperimentalActivityComposeApi::class)
 @Composable
 private fun BandoriPetApp() {
     val context = LocalContext.current
@@ -227,6 +232,18 @@ private fun BandoriPetApp() {
         selectedModel = model
         preferredModelAssetPath = model?.modelAssetPath
         saveModelSelection(appContext, characterId, model)
+    }
+
+    PredictiveBackHandler(enabled = live2DFullScreen || selectedScreen != Screen.Live2D) { progress ->
+        try {
+            progress.collect { }
+            when {
+                live2DFullScreen -> live2DFullScreen = false
+                selectedScreen != Screen.Live2D -> selectedScreen = Screen.Live2D
+            }
+        } catch (_: CancellationException) {
+            // Gesture was cancelled; keep the current screen state unchanged.
+        }
     }
 
     LaunchedEffect(modelAssetsVersion) {
