@@ -232,13 +232,10 @@ private fun BandoriPetApp() {
         saveModelSelection(appContext, characterId, model)
     }
 
-    PredictiveBackHandler(enabled = live2DFullScreen || selectedScreen != Screen.Live2D) { progress ->
+    PredictiveBackHandler(enabled = live2DFullScreen) { progress ->
         try {
             progress.collect { }
-            when {
-                live2DFullScreen -> live2DFullScreen = false
-                selectedScreen != Screen.Live2D -> selectedScreen = Screen.Live2D
-            }
+            live2DFullScreen = false
         } catch (_: CancellationException) {
             // Gesture was cancelled; keep the current screen state unchanged.
         }
