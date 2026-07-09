@@ -96,21 +96,29 @@ object ZstModelArchive {
     }
 
     private fun readIndex(context: Context, archiveAssetPath: String): Set<String> {
+        val scannedFiles = linkedSetOf<String>()
         openArchive(context, archiveAssetPath).use { input ->
             while (true) {
                 val entry = nextTarEntry(input) ?: break
                 if (entry.name == INDEX_MEMBER) {
                     val data = input.readExactly(entry.size)
                     skipPadding(input, entry.size)
-                    val files = JSONObject(data.toString(Charsets.UTF_8)).getJSONArray("files")
-                    return buildSet {
-                        for (i in 0 until files.length()) add(normalize(files.getString(i)))
+                    val indexedFiles = runCatching {
+                        val files = JSONObject(data.toString(Charsets.UTF_8)).getJSONArray("files")
+                        buildSet {
+                            for (i in 0 until files.length()) add(normalize(files.getString(i)))
+                        }
+                    }.getOrNull()
+                    if (indexedFiles != null) {
+                        return indexedFiles
                     }
+                } else {
+                    if (entry.isFile) scannedFiles.add(entry.name)
+                    skipEntry(input, entry.size)
                 }
-                skipEntry(input, entry.size)
             }
         }
-        return emptySet()
+        return scannedFiles
     }
 
     private fun readEntries(context: Context, archiveAssetPath: String, innerPaths: Set<String>): Map<String, ByteArray> {
