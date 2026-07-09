@@ -90,6 +90,8 @@ struct Renderer {
     std::atomic<bool> running{true};
     std::atomic<bool> pendingResize{false};
     std::atomic<bool> pendingTouch{false};
+    std::atomic<float> touchXRatio{0.5f};
+    std::atomic<float> touchYRatio{0.5f};
     std::atomic<bool> pendingTransform{false};
     std::atomic<bool> pendingRenderOptions{false};
     std::atomic<int> fpsLimit{60};
@@ -309,13 +311,48 @@ local groups = {}
 local group_index = 1
 local default_group = nil
 local active_motion_kind = nil
+local touch_bucket_indices = {}
 local model_is_moc3 = false
 local offset_x = 0
 local offset_y = 0
 local scale = 1
+local start_motion = nil
 
 local ACTION_GROUP_ORDER = {
-    "tap_body", "tap_head", "angry01", "bye01", "kime01", "smile01", "nf01", "nnf01",
+    "surprised01", "shame01", "pui01", "smile01", "kandou01", "kime01",
+    "nf_left01", "nnf_left01", "nf_right01", "nnf_right01", "nf01", "nnf01",
+    "angry01", "sad01", "tap_body", "tap_head", "bye01",
+}
+
+local TOUCH_BUCKETS = {
+    head = {
+        { "surprised", "shame", "pui", "smile" },
+        { "kandou", "kime", "nf" },
+    },
+    upper_body_left = {
+        { "nf_left", "nnf_left" },
+        { "shame", "surprised", "smile" },
+    },
+    upper_body_center = {
+        { "smile", "kime", "surprised", "shame" },
+        { "angry", "pui", "nf" },
+    },
+    upper_body_right = {
+        { "nf_right", "nnf_right" },
+        { "shame", "surprised", "smile" },
+    },
+    lower_body_left = {
+        { "nf_left", "nnf_left" },
+        { "surprised", "sad", "smile" },
+    },
+    lower_body_center = {
+        { "shame", "surprised", "angry" },
+        { "smile", "kime" },
+    },
+    lower_body_right = {
+        { "nf_right", "nnf_right" },
+        { "surprised", "sad", "smile" },
+    },
 }
 
 local function ends_with(value, suffix)
@@ -436,6 +473,119 @@ local function build_action_groups(names)
     return result
 end
 
+local function clamp01(value)
+    value = tonumber(value) or 0
+    if value < 0 then return 0 end
+    if value > 1 then return 1 end
+    return value
+end
+
+local function classify_x_third(x_ratio)
+    if x_ratio < 1 / 3 then return "left" end
+    if x_ratio < 2 / 3 then return "center" end
+    return "right"
+end
+
+local function motion_base_and_side(name)
+    local text = string.lower(tostring(name or "")):gsub("\\", "/")
+    local token = text:match("([^/]+)$") or text
+    token = token:gsub("%.motion3?%.json$", "")
+    token = token:gsub("^mtn_", "")
+
+    local side = nil
+    local suffix = token:match("_([lcr])$")
+    if suffix ~= nil then
+        if suffix == "l" then side = "left" end
+        if suffix == "c" then side = "center" end
+        if suffix == "r" then side = "right" end
+        token = token:sub(1, -3)
+    end
+
+    token = token:gsub("%d+$", "")
+    return token, side
+end
+
+local function split_directional_tag(tag)
+    local text = string.lower(tostring(tag or ""))
+    local base, side = text:match("^(.-)_(left)$")
+    if base ~= nil then return base, side end
+    base, side = text:match("^(.-)_(center)$")
+    if base ~= nil then return base, side end
+    base, side = text:match("^(.-)_(right)$")
+    if base ~= nil then return base, side end
+    return text, nil
+end
+
+local function motion_matches_tag(name, tag)
+    local base, side = motion_base_and_side(name)
+    local tag_base, tag_side = split_directional_tag(tag)
+    if tag_side ~= nil then
+        return base == tag_base .. "_" .. tag_side or (base == tag_base and side == tag_side)
+    end
+    return base == tag_base
+end
+
+local function candidates_for_tags(tags)
+    local result = {}
+    local seen = {}
+    for _, tag in ipairs(tags or {}) do
+        for _, group in ipairs(groups) do
+            if not seen[group] and motion_matches_tag(group, tag) then
+                seen[group] = true
+                result[#result + 1] = group
+            end
+        end
+    end
+    return result
+end
+
+local function any_hit_is_head_or_face(hit_parts)
+    if type(hit_parts) ~= "table" then return false end
+    for _, part in pairs(hit_parts) do
+        local name = string.lower(tostring(part or ""))
+        if name:find("head", 1, true) or name:find("face", 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function classify_touch_region(x_ratio, y_ratio)
+    x_ratio = clamp01(x_ratio)
+    y_ratio = clamp01(y_ratio)
+
+    local hit_parts = nil
+    if renderer and renderer.hit_test then
+        local ok, result = pcall(function() return renderer:hit_test(x_ratio * width, y_ratio * height) end)
+        if ok then hit_parts = result end
+    end
+    if any_hit_is_head_or_face(hit_parts) or y_ratio < 0.38 then
+        return "head"
+    end
+
+    local column = classify_x_third(x_ratio)
+    if y_ratio < 0.64 then
+        return "upper_body_" .. column
+    end
+    return "lower_body_" .. column
+end
+
+local function try_start_from_candidates(candidates, key)
+    if #candidates == 0 then return false end
+    local start_index = touch_bucket_indices[key] or 1
+    for offset = 0, #candidates - 1 do
+        local index = ((start_index + offset - 1) % #candidates) + 1
+        local group = candidates[index]
+        local ok, started = pcall(function() return start_motion(group, false, 3) end)
+        if ok and started then
+            touch_bucket_indices[key] = index % #candidates + 1
+            active_motion_kind = "action"
+            return true
+        end
+    end
+    return false
+end
+
 local function collect_moc3_groups()
     groups = {}
     default_group = nil
@@ -478,7 +628,7 @@ local function is_motion_finished()
     return manager == nil or manager:isFinished()
 end
 
-local function start_motion(group, loop, priority)
+function start_motion(group, loop, priority)
     if not renderer or group == nil then return false end
     if model_is_moc3 then
         renderer:start_motion(group, 0, priority, loop)
@@ -514,6 +664,8 @@ function __bp_load(path, w, h)
     width = w
     height = h
     active_motion_kind = nil
+    touch_bucket_indices = {}
+    group_index = 1
     if ends_with(path, ".model3.json") then
         model_is_moc3 = true
         local embed = require("live2d_moc3_pet_embed")
@@ -541,8 +693,17 @@ function __bp_resize(w, h)
     if renderer and renderer.resize then renderer:resize(width, height) end
 end
 
-function __bp_touch()
+function __bp_touch(x_ratio, y_ratio)
     if not renderer or #groups == 0 then return end
+    local region = classify_touch_region(x_ratio, y_ratio)
+    local buckets = TOUCH_BUCKETS[region] or TOUCH_BUCKETS.head
+    for bucket_index, tags in ipairs(buckets) do
+        local candidates = candidates_for_tags(tags)
+        if try_start_from_candidates(candidates, region .. ":" .. tostring(bucket_index)) then
+            return
+        end
+    end
+
     for _ = 1, #groups do
         local group = groups[group_index]
         group_index = group_index % #groups + 1
@@ -583,6 +744,8 @@ static void renderLoop(Renderer* renderer) {
         std::string model;
         std::unordered_map<std::string, std::string> resources;
         bool shouldTouch = renderer->pendingTouch.exchange(false);
+        float touchXRatio = renderer->touchXRatio.load();
+        float touchYRatio = renderer->touchYRatio.load();
         bool shouldResize = renderer->pendingResize.exchange(false);
         bool shouldTransform = renderer->pendingTransform.exchange(false);
         bool shouldUpdateRenderOptions = renderer->pendingRenderOptions.exchange(false);
@@ -613,7 +776,9 @@ static void renderLoop(Renderer* renderer) {
         }
         if (shouldTouch) {
             getGlobal(renderer, "__bp_touch");
-            callLua(renderer, "__bp_touch", 0);
+            renderer->luaApi.pushNumber(renderer->lua, touchXRatio);
+            renderer->luaApi.pushNumber(renderer->lua, touchYRatio);
+            callLua(renderer, "__bp_touch", 2);
         }
         if (shouldTransform) {
             getGlobal(renderer, "__bp_transform");
@@ -750,9 +915,12 @@ Java_com_bandori_pet_live2d_NativeLive2D_setTransform(JNIEnv*, jobject, jlong ha
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_bandori_pet_live2d_NativeLive2D_touch(JNIEnv*, jobject, jlong handle, jfloat, jfloat) {
+Java_com_bandori_pet_live2d_NativeLive2D_touch(JNIEnv*, jobject, jlong handle, jfloat xRatio, jfloat yRatio) {
     auto* renderer = reinterpret_cast<Renderer*>(handle);
-    if (renderer != nullptr) renderer->pendingTouch.store(true);
+    if (renderer == nullptr) return;
+    renderer->touchXRatio.store(std::clamp(static_cast<float>(xRatio), 0.0f, 1.0f));
+    renderer->touchYRatio.store(std::clamp(static_cast<float>(yRatio), 0.0f, 1.0f));
+    renderer->pendingTouch.store(true);
 }
 
 extern "C" JNIEXPORT jstring JNICALL

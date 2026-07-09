@@ -135,7 +135,7 @@ class Live2DRenderView @JvmOverloads constructor(
         interactionChanged?.invoke()
         if (interactionLocked) {
             if (event.actionMasked == MotionEvent.ACTION_UP && handle != 0L) {
-                NativeLive2D.touch(handle, event.x, event.y)
+                sendTouch(event.x, event.y)
                 performClick()
             }
             return true
@@ -193,7 +193,7 @@ class Live2DRenderView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP -> {
                 if (!moved && handle != 0L) {
-                    NativeLive2D.touch(handle, event.x, event.y)
+                    sendTouch(event.x, event.y)
                     performClick()
                 }
                 pinching = false
@@ -201,6 +201,12 @@ class Live2DRenderView @JvmOverloads constructor(
             MotionEvent.ACTION_CANCEL -> pinching = false
         }
         return true
+    }
+
+    private fun sendTouch(x: Float, y: Float) {
+        val xRatio = x / max(width.toFloat(), 1f)
+        val yRatio = y / max(height.toFloat(), 1f)
+        NativeLive2D.touch(handle, xRatio.coerceIn(0f, 1f), yRatio.coerceIn(0f, 1f))
     }
 
     private fun pointerSpan(event: MotionEvent): Float {
