@@ -36,6 +36,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,6 +46,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -647,6 +651,12 @@ private fun ModelScreen(
                             }
                             DropdownMenuItem(
                                 text = { Text("更新模型") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Refresh,
+                                        contentDescription = null,
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
                                     updateCharacterModel(character)
@@ -655,6 +665,12 @@ private fun ModelScreen(
                             DropdownMenuItem(
                                 text = { Text("删除已下载模型") },
                                 enabled = hasDownloadedModel,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Delete,
+                                        contentDescription = null,
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
                                     deleteCharacterModel(character)
