@@ -16,6 +16,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
+data class Live2DTransform(
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val scale: Float = 1f,
+)
+
 class Live2DRenderView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -40,6 +46,7 @@ class Live2DRenderView @JvmOverloads constructor(
 
     var statusChanged: ((String?) -> Unit)? = null
     var interactionChanged: (() -> Unit)? = null
+    var transformChanged: ((Live2DTransform) -> Unit)? = null
 
     init {
         setOpaque(false)
@@ -61,6 +68,15 @@ class Live2DRenderView @JvmOverloads constructor(
     fun setInteractionLocked(locked: Boolean) {
         interactionLocked = locked
     }
+
+    fun setTransform(transform: Live2DTransform) {
+        offsetX = transform.offsetX
+        offsetY = transform.offsetY
+        modelScale = transform.scale.coerceIn(0.4f, 3f)
+        applyTransform()
+    }
+
+    fun currentTransform(): Live2DTransform = Live2DTransform(offsetX, offsetY, modelScale)
 
     fun setRenderOptions(fpsLimit: Int, vsyncEnabled: Boolean) {
         val nextFpsLimit = fpsLimit.coerceIn(15, 120)
@@ -179,6 +195,7 @@ class Live2DRenderView @JvmOverloads constructor(
                         if (nextScale != modelScale) {
                             modelScale = nextScale
                             applyTransform()
+                            transformChanged?.invoke(currentTransform())
                             moved = true
                         }
                     }
@@ -191,6 +208,7 @@ class Live2DRenderView @JvmOverloads constructor(
                         offsetX += dx * 2f / base
                         offsetY -= dy * 2f / base
                         applyTransform()
+                        transformChanged?.invoke(currentTransform())
                         moved = true
                     }
                     lastX = event.x

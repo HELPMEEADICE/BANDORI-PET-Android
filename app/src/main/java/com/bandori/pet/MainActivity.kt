@@ -1,9 +1,9 @@
 package com.bandori.pet
 
-import android.content.Context
+import android.app.WallpaperManager
+import android.content.ComponentName
 import android.content.Intent
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.ComponentActivity
@@ -99,6 +99,7 @@ import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.ui.theme.BandoriPetTheme
+import com.bandori.pet.wallpaper.Live2DWallpaperService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -107,76 +108,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.roundToInt
-
-private const val SETTINGS_PREFS = "bandori_pet_settings"
-private const val KEY_FPS_LIMIT = "fps_limit"
-private const val KEY_VSYNC_ENABLED = "vsync_enabled"
-private const val KEY_LIVE2D_BACKGROUND_URI = "live2d_background_uri"
-private const val KEY_SELECTED_CHARACTER_ID = "selected_character_id"
-private const val KEY_SELECTED_MODEL_ASSET_PATH = "selected_model_asset_path"
-
-private fun loadSelectedCharacterId(context: Context): String =
-    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_SELECTED_CHARACTER_ID, "kasumi") ?: "kasumi"
-
-private fun loadSelectedModelAssetPath(context: Context): String? =
-    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_SELECTED_MODEL_ASSET_PATH, null)
-
-private fun saveModelSelection(context: Context, characterId: String, model: ModelChoice?) {
-    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit()
-        .putString(KEY_SELECTED_CHARACTER_ID, characterId)
-        .apply {
-            if (model == null) {
-                remove(KEY_SELECTED_MODEL_ASSET_PATH)
-            } else {
-                putString(KEY_SELECTED_MODEL_ASSET_PATH, model.modelAssetPath)
-            }
-        }
-        .apply()
-}
-
-private data class RenderSettings(
-    val fpsLimit: Int = 60,
-    val vsyncEnabled: Boolean = true,
-    val backgroundUri: String? = null,
-) {
-    fun save(context: Context) {
-        context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putInt(KEY_FPS_LIMIT, fpsLimit)
-            .putBoolean(KEY_VSYNC_ENABLED, vsyncEnabled)
-            .apply {
-                if (backgroundUri.isNullOrBlank()) {
-                    remove(KEY_LIVE2D_BACKGROUND_URI)
-                } else {
-                    putString(KEY_LIVE2D_BACKGROUND_URI, backgroundUri)
-                }
-            }
-            .apply()
-    }
-
-    companion object {
-        fun load(context: Context): RenderSettings {
-            val prefs = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-            return RenderSettings(
-                fpsLimit = prefs.getInt(KEY_FPS_LIMIT, 60).coerceIn(15, 120),
-                vsyncEnabled = prefs.getBoolean(KEY_VSYNC_ENABLED, true),
-                backgroundUri = prefs.getString(KEY_LIVE2D_BACKGROUND_URI, null),
-            )
-        }
-    }
-}
-
-private fun persistBackgroundUri(context: Context, uri: Uri) {
-    runCatching {
-        context.contentResolver.takePersistableUriPermission(
-            uri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION,
-        )
-    }
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -988,6 +919,9 @@ private fun SettingsScreen(
     renderSettings: RenderSettings,
     onRenderSettingsChanged: (RenderSettings) -> Unit,
 ) {
+    val context = LocalContext.current
+    var wallpaperEnabled by remember { mutableStateOf(isWallpaperEnabled(context.applicationContext)) }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -996,10 +930,82 @@ private fun SettingsScreen(
             settings = renderSettings,
             onSettingsChanged = onRenderSettingsChanged,
         )
+        WallpaperSettingsCard(
+            enabled = wallpaperEnabled,
+            onEnabledChanged = { enabled ->
+                wallpaperEnabled = enabled
+                setWallpaperEnabled(context.applicationContext, enabled)
+                if (enabled) openLiveWallpaperPicker(context)
+            },
+            onAdjustPosition = {
+                context.startActivity(Intent(context, WallpaperAdjustActivity::class.java))
+            },
+        )
         InfoCard(
             "关于",
             "Bandori Pet Android。点击 Live2D 展示框会轮换触发模型动作。当前项目使用 GPLv3 许可证发布。",
         )
+    }
+}
+
+private fun openLiveWallpaperPicker(context: android.content.Context) {
+    val component = ComponentName(context, Live2DWallpaperService::class.java)
+    val changeIntent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+        .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, component)
+    val fallbackIntent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
+    runCatching { context.startActivity(changeIntent) }
+        .recoverCatching { context.startActivity(fallbackIntent) }
+}
+
+@Composable
+private fun WallpaperSettingsCard(
+    enabled: Boolean,
+    onEnabledChanged: (Boolean) -> Unit,
+    onAdjustPosition: () -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("壁纸设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "桌面渲染使用当前选择的 Live2D 模型。桌面上只响应点击动作，位置需要在这里调整。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("开启桌面渲染", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (enabled) "已允许动态壁纸渲染，系统仍需要选择 Bandori Pet 壁纸。" else "关闭后即使已设为壁纸也不会启动渲染。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onEnabledChanged)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("调整模型位置", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "全屏后单指拖动，双指缩放，保存后应用到桌面壁纸。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Button(onClick = onAdjustPosition) {
+                    Text("调整")
+                }
+            }
+        }
     }
 }
 
