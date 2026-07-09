@@ -952,8 +952,21 @@ private fun SettingsScreen(
     var floatingOverlaySettings by remember { mutableStateOf(FloatingOverlaySettings.load(appContext)) }
 
     fun updateFloatingOverlaySettings(settings: FloatingOverlaySettings) {
-        floatingOverlaySettings = settings
-        settings.save(appContext)
+        val latestItemsById = FloatingOverlaySettings.load(appContext).items.associateBy { it.id }
+        val nextSettings = settings.copy(
+            items = settings.items.map { item ->
+                latestItemsById[item.id]?.let { latest ->
+                    item.copy(
+                        x = latest.x,
+                        y = latest.y,
+                        width = latest.width,
+                        height = latest.height,
+                    )
+                } ?: item
+            },
+        )
+        floatingOverlaySettings = nextSettings
+        nextSettings.save(appContext)
         FloatingLive2DOverlayService.sync(appContext)
     }
 

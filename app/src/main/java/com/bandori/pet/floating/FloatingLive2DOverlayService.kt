@@ -23,7 +23,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 class FloatingLive2DOverlayService : Service() {
-    private val windows = mutableListOf<FloatingWindow>()
+    private val windows = linkedMapOf<String, FloatingWindow>()
     private lateinit var windowManager: WindowManager
 
     override fun onCreate() {
@@ -45,35 +45,52 @@ class FloatingLive2DOverlayService : Service() {
 
     private fun syncWindows() {
         val settings = FloatingOverlaySettings.load(applicationContext)
-        clearWindows()
         if (!settings.enabled || settings.items.isEmpty() || !canDrawOverlays(applicationContext)) {
+            clearWindows()
             stopSelf()
             return
         }
 
         val renderSettings = RenderSettings.load(applicationContext)
+        val activeIds = settings.items.map { it.id }.toSet()
+        windows.keys.filterNot { it in activeIds }.forEach(::removeWindow)
+
         settings.items.forEach { item ->
-            val window = FloatingWindow(
-                context = this,
-                item = item,
-                locked = settings.locked,
-                fpsLimit = renderSettings.fpsLimit,
-                vsyncEnabled = renderSettings.vsyncEnabled,
-                onBoundsChanged = { x, y, width, height ->
-                    saveFloatingLive2DItemBounds(applicationContext, item.id, x, y, width, height)
-                },
-            )
-            windowManager.addView(window.root, window.params)
-            windows.add(window)
+            val existing = windows[item.id]
+            if (existing != null && existing.canReuseFor(item)) {
+                existing.update(
+                    item = item,
+                    locked = settings.locked,
+                    fpsLimit = renderSettings.fpsLimit,
+                    vsyncEnabled = renderSettings.vsyncEnabled,
+                )
+            } else {
+                if (existing != null) removeWindow(item.id)
+                val window = FloatingWindow(
+                    context = this,
+                    item = item,
+                    locked = settings.locked,
+                    fpsLimit = renderSettings.fpsLimit,
+                    vsyncEnabled = renderSettings.vsyncEnabled,
+                    onBoundsChanged = { x, y, width, height ->
+                        saveFloatingLive2DItemBounds(applicationContext, item.id, x, y, width, height)
+                    },
+                )
+                windowManager.addView(window.root, window.params)
+                windows[item.id] = window
+            }
         }
     }
 
     private fun clearWindows() {
-        windows.forEach { window ->
-            runCatching { windowManager.removeView(window.root) }
-            window.release()
-        }
+        windows.keys.toList().forEach(::removeWindow)
         windows.clear()
+    }
+
+    private fun removeWindow(id: String) {
+        val window = windows.remove(id) ?: return
+        runCatching { windowManager.removeView(window.root) }
+        window.release()
     }
 
     private class FloatingWindow(
@@ -84,6 +101,7 @@ class FloatingLive2DOverlayService : Service() {
         vsyncEnabled: Boolean,
         onBoundsChanged: (Int, Int, Int, Int) -> Unit,
     ) {
+        private val modelAssetPath = item.model.modelAssetPath
         private val renderView = Live2DRenderView(context).apply {
             setInteractionLocked(true)
             setRenderOptions(fpsLimit, vsyncEnabled)
@@ -118,6 +136,22 @@ class FloatingLive2DOverlayService : Service() {
             )
         }
 
+        fun canReuseFor(item: FloatingLive2DItem): Boolean = item.model.modelAssetPath == modelAssetPath
+
+        fun update(item: FloatingLive2DItem, locked: Boolean, fpsLimit: Int, vsyncEnabled: Boolean) {
+            root.setLocked(locked)
+            renderView.setRenderOptions(fpsLimit, vsyncEnabled)
+            val nextWidth = item.width.coerceIn(MIN_WIDTH, MAX_WIDTH)
+            val nextHeight = item.height.coerceIn(MIN_HEIGHT, MAX_HEIGHT)
+            if (params.x != item.x || params.y != item.y || params.width != nextWidth || params.height != nextHeight) {
+                params.x = item.x
+                params.y = item.y
+                params.width = nextWidth
+                params.height = nextHeight
+                root.updateWindow()
+            }
+        }
+
         fun release() {
             renderView.release()
         }
@@ -126,11 +160,12 @@ class FloatingLive2DOverlayService : Service() {
     private class DraggableOverlayLayout(
         context: Context,
         private val params: WindowManager.LayoutParams,
-        private val locked: Boolean,
+        locked: Boolean,
         private val onBoundsChanged: (Int, Int, Int, Int) -> Unit,
     ) : FrameLayout(context) {
         private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+        private var locked = locked
         private var downRawX = 0f
         private var downRawY = 0f
         private var startX = 0
@@ -225,7 +260,16 @@ class FloatingLive2DOverlayService : Service() {
             updateWindow()
         }
 
-        private fun updateWindow() {
+        fun setLocked(locked: Boolean) {
+            this.locked = locked
+            if (locked) {
+                if (dragging || resizing) saveBounds()
+                dragging = false
+                resizing = false
+            }
+        }
+
+        fun updateWindow() {
             runCatching { windowManager.updateViewLayout(this, params) }
         }
 
