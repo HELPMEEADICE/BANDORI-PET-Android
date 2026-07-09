@@ -5,7 +5,12 @@ import com.github.luben.zstd.ZstdInputStream
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
+import java.io.File
+import java.io.IOException
 import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 
 object ZstModelArchive {
     private const val INDEX_MEMBER = ".bandori_zst_index.json"
@@ -21,11 +26,47 @@ object ZstModelArchive {
     }
 
     fun listCharacters(context: Context): List<String> = runCatching {
-        context.assets.list(LOGICAL_MODELS_ROOT.trimEnd('/')).orEmpty()
+        val bundledCharacters = context.assets.list(LOGICAL_MODELS_ROOT.trimEnd('/')).orEmpty()
             .mapNotNull { entry -> entry.takeIf { it.endsWith(".zst") }?.removeSuffix(".zst") }
-            .filter { it.isNotBlank() }
-            .sorted()
+        val downloadedCharacters = downloadedModelsDir(context).listFiles { file ->
+            file.isFile && file.name.endsWith(".zst")
+        }.orEmpty().map { file -> file.name.removeSuffix(".zst") }
+        (bundledCharacters + downloadedCharacters).filter { it.isNotBlank() }.distinct().sorted()
     }.getOrDefault(emptyList())
+
+    fun downloadCharacter(context: Context, characterId: String): File {
+        val target = downloadedArchiveFile(context, characterId)
+        val parent = target.parentFile ?: throw IOException("无法创建模型下载目录")
+        if (!parent.exists() && !parent.mkdirs()) throw IOException("无法创建模型下载目录")
+        val temp = File(parent, "${target.name}.download")
+        if (temp.exists()) temp.delete()
+
+        val connection = URL(downloadUrl(characterId)).openConnection() as HttpURLConnection
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 60_000
+        connection.instanceFollowRedirects = true
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) throw IOException("下载失败：HTTP $code")
+            connection.inputStream.use { input ->
+                temp.outputStream().use { output -> input.copyTo(output) }
+            }
+        } finally {
+            connection.disconnect()
+        }
+
+        if (temp.length() == 0L) {
+            temp.delete()
+            throw IOException("下载内容为空")
+        }
+        if (target.exists() && !target.delete()) throw IOException("无法替换已有模型文件")
+        if (!temp.renameTo(target)) {
+            temp.copyTo(target, overwrite = true)
+            if (!temp.delete()) temp.deleteOnExit()
+        }
+        synchronized(indexCache) { indexCache.remove(archiveAssetPath(characterId)) }
+        return target
+    }
 
     fun listCostumes(context: Context, characterId: String): List<String> {
         val archiveAssetPath = archiveAssetPath(characterId)
@@ -143,8 +184,22 @@ object ZstModelArchive {
         return result
     }
 
-    private fun openArchive(context: Context, archiveAssetPath: String): InputStream =
-        ZstdInputStream(context.assets.open(archiveAssetPath))
+    private fun openArchive(context: Context, archiveAssetPath: String): InputStream {
+        val characterId = archiveAssetPath.removePrefix(LOGICAL_MODELS_ROOT).removeSuffix(".zst")
+        val downloaded = downloadedArchiveFile(context, characterId)
+        val input = if (downloaded.isFile) downloaded.inputStream() else context.assets.open(archiveAssetPath)
+        return ZstdInputStream(input)
+    }
+
+    private fun downloadedModelsDir(context: Context): File = File(context.filesDir, "models")
+
+    private fun downloadedArchiveFile(context: Context, characterId: String): File =
+        File(downloadedModelsDir(context), "${normalize(characterId).substringAfterLast('/')}.zst")
+
+    private fun downloadUrl(characterId: String): String {
+        val encodedName = URLEncoder.encode(characterId, Charsets.UTF_8.name()).replace("+", "%20")
+        return "https://modelscope.cn/datasets/HELPMEEADICE/BanG-Dream-Live2D/resolve/master/models/$encodedName.zst"
+    }
 
     private fun nextTarEntry(input: InputStream): TarEntry? {
         val header = ByteArray(512)

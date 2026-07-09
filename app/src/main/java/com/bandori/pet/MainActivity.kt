@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,7 +80,10 @@ import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.ui.theme.BandoriPetTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val SETTINGS_PREFS = "bandori_pet_settings"
@@ -141,19 +146,23 @@ private fun BandoriPetApp() {
     var selectedCharacterId by remember { mutableStateOf("tomorin") }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
     var live2DFullScreen by remember { mutableStateOf(false) }
+    var modelAssetsVersion by remember { mutableStateOf(0) }
     var renderSettings by remember { mutableStateOf(RenderSettings.load(context.applicationContext)) }
     val updateRenderSettings: (RenderSettings) -> Unit = { settings ->
         renderSettings = settings
         settings.save(context.applicationContext)
     }
 
-    LaunchedEffect(Unit) {
-        val repository = DataRepository(context)
-        val data = repository.load()
+    LaunchedEffect(modelAssetsVersion) {
+        val repository = DataRepository(context.applicationContext)
+        val data = withContext(Dispatchers.IO) { repository.load() }
         appData = data
         selectedBandId = data.bands.firstOrNull { selectedCharacterId in it.characters }?.id ?: data.bands.firstOrNull()?.id
-        selectedModel = data.characters[selectedCharacterId]
-            ?.let { repository.availableModels(it).firstOrNull() }
+        val models = withContext(Dispatchers.IO) {
+            data.characters[selectedCharacterId]?.let { repository.availableModels(it) }.orEmpty()
+        }
+        selectedModel = selectedModel?.takeIf { current -> models.any { it.modelAssetPath == current.modelAssetPath } }
+            ?: models.firstOrNull()
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -209,6 +218,7 @@ private fun BandoriPetApp() {
                                 selectedBandId = selectedBandId,
                                 selectedCharacterId = selectedCharacterId,
                                 selectedModel = selectedModel,
+                                modelAssetsVersion = modelAssetsVersion,
                                 onBandSelected = { band ->
                                     selectedBandId = band.id
                                     band.characters.firstOrNull()?.let { characterId ->
@@ -222,6 +232,7 @@ private fun BandoriPetApp() {
                                     selectedModel = DataRepository(context).availableModels(character).firstOrNull()
                                 },
                                 onModelSelected = { selectedModel = it },
+                                onModelAssetsChanged = { modelAssetsVersion += 1 },
                             )
                             Screen.Settings -> SettingsScreen(
                                 renderSettings = renderSettings,
@@ -503,18 +514,23 @@ private fun ModelScreen(
     selectedBandId: String?,
     selectedCharacterId: String,
     selectedModel: ModelChoice?,
+    modelAssetsVersion: Int,
     onBandSelected: (Band) -> Unit,
     onCharacterSelected: (CharacterInfo) -> Unit,
     onModelSelected: (ModelChoice) -> Unit,
+    onModelAssetsChanged: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val repository = remember(data) { DataRepository(context) }
     val selectedBand = data.bands.firstOrNull { it.id == selectedBandId } ?: data.bands.first()
     val characters = selectedBand.characters.mapNotNull { id -> data.characters[id] }
     val selectedCharacter = data.characters[selectedCharacterId]
-    val availableModels = remember(selectedCharacter) {
+    val availableModels = remember(selectedCharacter, modelAssetsVersion) {
         selectedCharacter?.let { repository.availableModels(it) }.orEmpty()
     }
+    var downloadingModel by remember(selectedCharacter?.id) { mutableStateOf(false) }
+    var downloadMessage by remember(selectedCharacter?.id) { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -565,6 +581,7 @@ private fun ModelScreen(
                         title = character.display,
                         subtitle = selectedBand.display,
                         imagePath = "models/${character.id}/character.png",
+                        imageReloadKey = modelAssetsVersion,
                         selected = character.id == selectedCharacterId,
                         aspectRatio = 0.82f,
                         onClick = { onCharacterSelected(character) },
@@ -582,7 +599,31 @@ private fun ModelScreen(
         ) {
             if (availableModels.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    EmptyMessage("该角色暂无本地模型", "请把模型放到 models/{角色名}/{服装名}/ 下。")
+                    ModelDownloadPrompt(
+                        character = selectedCharacter,
+                        downloading = downloadingModel,
+                        message = downloadMessage,
+                        onDownload = {
+                            selectedCharacter?.let { character ->
+                                downloadingModel = true
+                                downloadMessage = null
+                                scope.launch {
+                                    val result = runCatching {
+                                        withContext(Dispatchers.IO) {
+                                            ZstModelArchive.downloadCharacter(context.applicationContext, character.id)
+                                        }
+                                    }
+                                    result.onSuccess {
+                                        downloadMessage = "下载完成，正在载入..."
+                                        onModelAssetsChanged()
+                                    }.onFailure { error ->
+                                        downloadMessage = error.localizedMessage ?: "下载失败"
+                                    }
+                                    downloadingModel = false
+                                }
+                            }
+                        },
+                    )
                 }
             } else {
                 LazyVerticalGrid(
@@ -603,6 +644,42 @@ private fun ModelScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ModelDownloadPrompt(
+    character: CharacterInfo?,
+    downloading: Boolean,
+    message: String?,
+    onDownload: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Button(
+            enabled = character != null && !downloading,
+            onClick = onDownload,
+        ) {
+            if (downloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(if (downloading) "正在下载..." else "下载${character?.display ?: "角色"}模型")
+        }
+        message?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -736,6 +813,7 @@ private fun ImageCard(
     title: String,
     subtitle: String? = null,
     imagePath: String?,
+    imageReloadKey: Int = 0,
     selected: Boolean,
     aspectRatio: Float,
     onClick: () -> Unit,
@@ -764,6 +842,7 @@ private fun ImageCard(
         Box(Modifier.fillMaxSize()) {
             AssetImage(
                 path = imagePath,
+                reloadKey = imageReloadKey,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
                 placeholderText = title,
@@ -914,9 +993,9 @@ private val ModelChoice.isMoc3: Boolean
     get() = modelAssetPath.endsWith(".model3.json") || modelAssetPath.contains("moc3", ignoreCase = true)
 
 @Composable
-private fun AssetImage(path: String?, modifier: Modifier, contentScale: ContentScale, placeholderText: String? = null) {
+private fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, contentScale: ContentScale, placeholderText: String? = null) {
     val context = LocalContext.current
-    val bitmap = remember(path) {
+    val bitmap = remember(path, reloadKey) {
         path?.let {
             runCatching {
                 context.assets.open(it).use { input -> BitmapFactory.decodeStream(input)?.asImageBitmap() }
