@@ -111,7 +111,12 @@ class Live2DRenderView @JvmOverloads constructor(
                         )
                         applyTransform()
                     }
-                    val accepted = handle != 0L && NativeLive2D.loadModel(handle, prepared.modelPath)
+                    val accepted = handle != 0L && NativeLive2D.loadModel(
+                        handle,
+                        prepared.modelPath,
+                        prepared.resourcePaths.toTypedArray(),
+                        prepared.resourceBytes.toTypedArray(),
+                    )
                     val nativeError = if (handle != 0L) NativeLive2D.lastError(handle) else "渲染核心启动失败"
                     statusChanged?.invoke(
                         when {

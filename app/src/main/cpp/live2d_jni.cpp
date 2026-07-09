@@ -6,11 +6,14 @@
 #include <jni.h>
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <utility>
 
 #ifndef EGL_OPENGL_ES_API
 #define EGL_OPENGL_ES_API 0x30A0
@@ -37,6 +40,7 @@
 static constexpr int MAX_RENDER_EDGE = 1280;
 
 struct lua_State;
+typedef int (*lua_CFunction)(lua_State* L);
 
 struct LuaApi {
     void* handle = nullptr;
@@ -47,13 +51,24 @@ struct LuaApi {
     void (*close)(lua_State*) = nullptr;
     void (*getField)(lua_State*, int, const char*) = nullptr;
     void (*pushString)(lua_State*, const char*) = nullptr;
+    void (*pushLString)(lua_State*, const char*, size_t) = nullptr;
     void (*pushNumber)(lua_State*, double) = nullptr;
+    void (*pushNil)(lua_State*) = nullptr;
+    void (*pushLightUserData)(lua_State*, void*) = nullptr;
+    void (*pushCClosure)(lua_State*, lua_CFunction, int) = nullptr;
     void (*setField)(lua_State*, int, const char*) = nullptr;
     const char* (*toString)(lua_State*, int, size_t*) = nullptr;
+    void* (*toUserData)(lua_State*, int) = nullptr;
     void (*setTop)(lua_State*, int) = nullptr;
 };
 
 static constexpr int LUA_GLOBALSINDEX_COMPAT = -10002;
+static constexpr int LUA_UPVALUEINDEX_1 = LUA_GLOBALSINDEX_COMPAT - 1;
+
+static const char* (*gLuaToString)(lua_State*, int, size_t*) = nullptr;
+static void* (*gLuaToUserData)(lua_State*, int) = nullptr;
+static void (*gLuaPushLString)(lua_State*, const char*, size_t) = nullptr;
+static void (*gLuaPushNil)(lua_State*) = nullptr;
 
 struct Renderer {
     ANativeWindow* window = nullptr;
@@ -67,6 +82,8 @@ struct Renderer {
     lua_State* lua = nullptr;
     std::string runtimeRoot;
     std::string pendingModel;
+    std::unordered_map<std::string, std::string> pendingResources;
+    std::unordered_map<std::string, std::string> resources;
     std::string lastError;
     std::mutex mutex;
     std::thread renderThread;
@@ -136,14 +153,23 @@ static bool loadLua(Renderer* renderer) {
         && loadSymbol(api.handle, "lua_close", api.close)
         && loadSymbol(api.handle, "lua_getfield", api.getField)
         && loadSymbol(api.handle, "lua_pushstring", api.pushString)
+        && loadSymbol(api.handle, "lua_pushlstring", api.pushLString)
         && loadSymbol(api.handle, "lua_pushnumber", api.pushNumber)
+        && loadSymbol(api.handle, "lua_pushnil", api.pushNil)
+        && loadSymbol(api.handle, "lua_pushlightuserdata", api.pushLightUserData)
+        && loadSymbol(api.handle, "lua_pushcclosure", api.pushCClosure)
         && loadSymbol(api.handle, "lua_setfield", api.setField)
         && loadSymbol(api.handle, "lua_tolstring", api.toString)
+        && loadSymbol(api.handle, "lua_touserdata", api.toUserData)
         && loadSymbol(api.handle, "lua_settop", api.setTop);
     if (!ok) {
         setError(renderer, "LuaJIT 导出符号不完整");
         return false;
     }
+    gLuaToString = api.toString;
+    gLuaToUserData = api.toUserData;
+    gLuaPushLString = api.pushLString;
+    gLuaPushNil = api.pushNil;
     return true;
 }
 
@@ -158,6 +184,33 @@ static void getGlobal(Renderer* renderer, const char* name) {
 
 static void setGlobal(Renderer* renderer, const char* name) {
     renderer->luaApi.setField(renderer->lua, LUA_GLOBALSINDEX_COMPAT, name);
+}
+
+static std::string normalizeResourcePath(const char* path) {
+    std::string value = path != nullptr ? path : "";
+    std::replace(value.begin(), value.end(), '\\', '/');
+    while (value.rfind("./", 0) == 0) value.erase(0, 2);
+    return value;
+}
+
+static int readResourceLua(lua_State* lua) {
+    if (gLuaToUserData == nullptr || gLuaToString == nullptr || gLuaPushLString == nullptr || gLuaPushNil == nullptr) {
+        return 0;
+    }
+    auto* renderer = reinterpret_cast<Renderer*>(gLuaToUserData(lua, LUA_UPVALUEINDEX_1));
+    const char* pathChars = gLuaToString(lua, 1, nullptr);
+    if (renderer == nullptr || pathChars == nullptr) {
+        gLuaPushNil(lua);
+        return 1;
+    }
+    const std::string path = normalizeResourcePath(pathChars);
+    auto found = renderer->resources.find(path);
+    if (found == renderer->resources.end()) {
+        gLuaPushNil(lua);
+        return 1;
+    }
+    gLuaPushLString(lua, found->second.data(), found->second.size());
+    return 1;
 }
 
 static bool runLua(Renderer* renderer, const char* code) {
@@ -239,12 +292,16 @@ static bool initLua(Renderer* renderer) {
     renderer->luaApi.openLibs(renderer->lua);
     renderer->luaApi.pushString(renderer->lua, renderer->runtimeRoot.c_str());
     setGlobal(renderer, "__bp_runtime_root");
+    renderer->luaApi.pushLightUserData(renderer->lua, renderer);
+    renderer->luaApi.pushCClosure(renderer->lua, readResourceLua, 1);
+    setGlobal(renderer, "__bp_read_resource");
 
     static const char* bootstrap = R"lua(
 package.path = __bp_runtime_root .. "/?.lua;" .. __bp_runtime_root .. "/?/init.lua;" .. package.path
 package.cpath = __bp_runtime_root .. "/?.so;" .. package.cpath
 local gl = require("live2d.gl_loader")
 if gl.ensureExtensions then gl.ensureExtensions() end
+local raw_io_open = io.open
 local renderer = nil
 local width = 1
 local height = 1
@@ -263,6 +320,85 @@ local ACTION_GROUP_ORDER = {
 
 local function ends_with(value, suffix)
     return value:sub(-#suffix) == suffix
+end
+
+local function normalize_path(value)
+    return tostring(value or ""):gsub("\\", "/"):gsub("^%./", "")
+end
+
+local function memory_file(data)
+    local pos = 1
+    local file = {}
+    function file:read(fmt)
+        fmt = fmt or "*l"
+        if fmt == "*all" or fmt == "*a" then
+            local out = data:sub(pos)
+            pos = #data + 1
+            return out
+        end
+        if type(fmt) == "number" then
+            if fmt <= 0 then return "" end
+            local out = data:sub(pos, pos + fmt - 1)
+            pos = pos + #out
+            return #out > 0 and out or nil
+        end
+        if fmt == "*l" then
+            if pos > #data then return nil end
+            local next_line = data:find("\n", pos, true)
+            local out
+            if next_line then
+                out = data:sub(pos, next_line - 1):gsub("\r$", "")
+                pos = next_line + 1
+            else
+                out = data:sub(pos)
+                pos = #data + 1
+            end
+            return out
+        end
+        return nil
+    end
+    function file:close() return true end
+    function file:seek(whence, offset)
+        offset = tonumber(offset) or 0
+        if whence == nil or whence == "cur" then
+            pos = pos + offset
+        elseif whence == "set" then
+            pos = offset + 1
+        elseif whence == "end" then
+            pos = #data + offset + 1
+        else
+            return nil, "invalid whence"
+        end
+        if pos < 1 then pos = 1 end
+        if pos > #data + 1 then pos = #data + 1 end
+        return pos - 1
+    end
+    return file
+end
+
+local function archive_loader(path)
+    if __bp_read_resource == nil then return nil end
+    return __bp_read_resource(normalize_path(path))
+end
+
+local function is_archive_path(path)
+    return tostring(path or ""):sub(1, 10) == "archive://"
+end
+
+io.open = function(path, mode)
+    mode = mode or "r"
+    if type(path) == "string" and not mode:find("[wa+]", 1, false) then
+        local data = archive_loader(path)
+        if data ~= nil then return memory_file(data) end
+    end
+    return raw_io_open(path, mode)
+end
+
+local function resource_options(extra)
+    extra = extra or {}
+    extra.resource_streams = extra.resource_streams or extra.resourceStreams or { __loader = archive_loader }
+    extra.resource_streams.__loader = extra.resource_streams.__loader or archive_loader
+    return extra
 end
 
 local function is_idle_group(name)
@@ -382,13 +518,15 @@ function __bp_load(path, w, h)
         model_is_moc3 = true
         local embed = require("live2d_moc3_pet_embed")
         renderer = embed.new(width, height)
-        renderer:load_model(path, width, height)
+        renderer:load_model(path, width, height, is_archive_path(path) and resource_options() or nil)
         collect_moc3_groups()
     else
         model_is_moc3 = false
         local embed = require("live2d_embed")
         renderer = embed.new(width, height)
-        renderer:load_model(path, width, height, { center = false })
+        local opts = { center = false }
+        if is_archive_path(path) then opts = resource_options(opts) end
+        renderer:load_model(path, width, height, opts)
         collect_moc_groups()
     end
     if renderer.set_offset then renderer:set_offset(offset_x, offset_y) end
@@ -443,6 +581,7 @@ static void renderLoop(Renderer* renderer) {
     while (renderer->running.load()) {
         const auto frameStart = std::chrono::steady_clock::now();
         std::string model;
+        std::unordered_map<std::string, std::string> resources;
         bool shouldTouch = renderer->pendingTouch.exchange(false);
         bool shouldResize = renderer->pendingResize.exchange(false);
         bool shouldTransform = renderer->pendingTransform.exchange(false);
@@ -452,6 +591,7 @@ static void renderLoop(Renderer* renderer) {
         {
             std::lock_guard<std::mutex> lock(renderer->mutex);
             model.swap(renderer->pendingModel);
+            resources.swap(renderer->pendingResources);
         }
 
         if (shouldUpdateRenderOptions) {
@@ -464,6 +604,7 @@ static void renderLoop(Renderer* renderer) {
             callLua(renderer, "__bp_resize", 2);
         }
         if (!model.empty()) {
+            renderer->resources = std::move(resources);
             getGlobal(renderer, "__bp_load");
             renderer->luaApi.pushString(renderer->lua, model.c_str());
             renderer->luaApi.pushNumber(renderer->lua, width);
@@ -525,7 +666,7 @@ Java_com_bandori_pet_live2d_NativeLive2D_create(
     renderer->vsyncEnabled.store(vsyncEnabled == JNI_TRUE);
     const char* runtimeChars = env->GetStringUTFChars(runtimeRoot, nullptr);
     renderer->runtimeRoot = runtimeChars != nullptr ? runtimeChars : "";
-    env->ReleaseStringUTFChars(runtimeRoot, runtimeChars);
+    if (runtimeChars != nullptr) env->ReleaseStringUTFChars(runtimeRoot, runtimeChars);
     renderer->window = ANativeWindow_fromSurface(env, surface);
     if (renderer->window == nullptr) {
         delete renderer;
@@ -545,16 +686,47 @@ Java_com_bandori_pet_live2d_NativeLive2D_resize(JNIEnv*, jobject, jlong handle, 
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_bandori_pet_live2d_NativeLive2D_loadModel(JNIEnv* env, jobject, jlong handle, jstring modelPath) {
+Java_com_bandori_pet_live2d_NativeLive2D_loadModel(
+    JNIEnv* env,
+    jobject,
+    jlong handle,
+    jstring modelPath,
+    jobjectArray resourcePaths,
+    jobjectArray resourceBytes
+) {
     auto* renderer = reinterpret_cast<Renderer*>(handle);
     if (renderer == nullptr) return JNI_FALSE;
     const char* modelChars = env->GetStringUTFChars(modelPath, nullptr);
+    std::unordered_map<std::string, std::string> resources;
+    if (resourcePaths != nullptr && resourceBytes != nullptr) {
+        const jsize pathCount = env->GetArrayLength(resourcePaths);
+        const jsize byteCount = env->GetArrayLength(resourceBytes);
+        const jsize count = pathCount < byteCount ? pathCount : byteCount;
+        for (jsize i = 0; i < count; ++i) {
+            auto pathString = static_cast<jstring>(env->GetObjectArrayElement(resourcePaths, i));
+            auto byteArray = static_cast<jbyteArray>(env->GetObjectArrayElement(resourceBytes, i));
+            if (pathString != nullptr && byteArray != nullptr) {
+                const char* pathChars = env->GetStringUTFChars(pathString, nullptr);
+                const jsize length = env->GetArrayLength(byteArray);
+                std::string bytes;
+                bytes.resize(static_cast<size_t>(length));
+                if (length > 0) {
+                    env->GetByteArrayRegion(byteArray, 0, length, reinterpret_cast<jbyte*>(bytes.data()));
+                }
+                resources[normalizeResourcePath(pathChars)] = std::move(bytes);
+                if (pathChars != nullptr) env->ReleaseStringUTFChars(pathString, pathChars);
+            }
+            if (pathString != nullptr) env->DeleteLocalRef(pathString);
+            if (byteArray != nullptr) env->DeleteLocalRef(byteArray);
+        }
+    }
     {
         std::lock_guard<std::mutex> lock(renderer->mutex);
         renderer->pendingModel = modelChars != nullptr ? modelChars : "";
+        renderer->pendingResources = std::move(resources);
         renderer->lastError.clear();
     }
-    env->ReleaseStringUTFChars(modelPath, modelChars);
+    if (modelChars != nullptr) env->ReleaseStringUTFChars(modelPath, modelChars);
     return JNI_TRUE;
 }
 
