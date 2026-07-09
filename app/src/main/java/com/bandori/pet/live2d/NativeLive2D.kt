@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.Surface
+import com.bandori.pet.I18n
 import kotlin.math.max
 
 object NativeLive2D {
@@ -60,7 +61,7 @@ object NativeLive2D {
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, decodeOptions) }
-            ?: error("无法读取背景图片")
+            ?: error(I18n.t("error_read_background"))
         return scaleToMaxEdge(decoded)
     }
 

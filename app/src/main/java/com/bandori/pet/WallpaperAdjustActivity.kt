@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 class WallpaperAdjustActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        I18n.init(applicationContext)
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_FULLSCREEN or
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
@@ -110,9 +111,9 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
             ) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("还没有可调整的模型", fontWeight = FontWeight.Bold)
-                    Text("请先在“模型”页选择一个 Live2D 模型。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = onClose) { Text("返回") }
+                    Text(I18n.t("wallpaper_no_model"), fontWeight = FontWeight.Bold)
+                    Text(I18n.t("wallpaper_no_model_desc"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = onClose) { Text(I18n.t("wallpaper_back")) }
                 }
             }
         } else {
@@ -149,8 +150,8 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("调整桌面模型位置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("单指拖动位置，双指缩放。点击保存后应用到桌面壁纸。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(I18n.t("wallpaper_adjust_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(I18n.t("wallpaper_adjust_desc"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -189,11 +190,11 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                         transform = Live2DTransform()
                     },
                 ) {
-                    Text("重置")
+                    Text(I18n.t("wallpaper_reset"))
                 }
                 Spacer(Modifier.height(1.dp))
                 TextButton(modifier = Modifier.weight(1f), onClick = onClose) {
-                    Text("取消")
+                    Text(I18n.t("wallpaper_cancel"))
                 }
                 Button(
                     modifier = Modifier.weight(1f),
@@ -202,7 +203,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                         onClose()
                     },
                 ) {
-                    Text("保存")
+                    Text(I18n.t("wallpaper_save"))
                 }
             }
         }

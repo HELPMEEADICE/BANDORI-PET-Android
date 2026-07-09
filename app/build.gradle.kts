@@ -74,6 +74,7 @@ val syncLive2DAssets by tasks.registering(Sync::class) {
     from(rootProject.file("outfit.json"))
     from(rootProject.file("band_logo")) { into("band_logo") }
     from(rootProject.file("models")) { into("models") }
+    from(rootProject.file("lang")) { into("lang") }
     from(rootProject.file("third_party/Live2D-v2-Lua")) {
         into("third_party/Live2D-v2-Lua")
         exclude("**/.git/**")

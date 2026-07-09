@@ -6,6 +6,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
+import com.bandori.pet.I18n
 import com.bandori.pet.data.ModelChoice
 import kotlin.math.hypot
 import kotlin.math.max
@@ -131,7 +132,7 @@ class Live2DRenderView @JvmOverloads constructor(
         if (!surface.isValid || loading) return
 
         loading = true
-        statusChanged?.invoke("正在准备 Live2D 资源...")
+        statusChanged?.invoke(I18n.t("status_preparing"))
         scope.launch {
             runCatching { AssetSync.prepareModel(context.applicationContext, model.modelAssetPath) }
                 .onSuccess { prepared ->
@@ -154,16 +155,16 @@ class Live2DRenderView @JvmOverloads constructor(
                         prepared.resourcePaths.toTypedArray(),
                         prepared.resourceBytes.toTypedArray(),
                     )
-                    val nativeError = if (handle != 0L) NativeLive2D.lastError(handle) else "渲染核心启动失败"
+                    val nativeError = if (handle != 0L) NativeLive2D.lastError(handle) else I18n.t("status_core_failed")
                     statusChanged?.invoke(
                         when {
                             nativeError.isNotBlank() -> nativeError
                             accepted -> null
-                            else -> "模型加载失败"
+                            else -> I18n.t("status_model_load_failed")
                         },
                     )
                 }
-                .onFailure { statusChanged?.invoke(it.message ?: "资源准备失败") }
+                .onFailure { statusChanged?.invoke(it.message ?: I18n.t("status_resource_failed")) }
             loading = false
         }
     }

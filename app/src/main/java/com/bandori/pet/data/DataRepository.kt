@@ -1,6 +1,7 @@
 package com.bandori.pet.data
 
 import android.content.Context
+import com.bandori.pet.I18n
 import org.json.JSONObject
 
 class DataRepository(private val context: Context) {
@@ -68,7 +69,7 @@ class DataRepository(private val context: Context) {
                 bands.add(
                     Band(
                         id = "others",
-                        display = "其他角色",
+                        display = I18n.t("model_band_others"),
                         logo = null,
                         characters = ungroupedArchiveCharacterIds,
                     ),
@@ -85,7 +86,7 @@ class DataRepository(private val context: Context) {
 
     fun availableModels(character: CharacterInfo): List<ModelChoice> {
         val costumeChoices = if (character.costumes.isEmpty()) {
-            linkedMapOf("live_default" to "默认")
+            linkedMapOf("live_default" to I18n.t("model_default_costume"))
         } else {
             character.costumes.toMutableMap()
         }

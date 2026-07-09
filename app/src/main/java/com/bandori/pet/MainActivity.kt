@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val appContext = applicationContext
+        I18n.init(appContext)
         setContent {
             var themeSettings by remember { mutableStateOf(ThemeSettings.load(appContext)) }
             val darkTheme = themeSettings.darkMode.resolveDarkTheme(isSystemInDarkTheme())
@@ -137,10 +138,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen(val title: String) {
-    Live2D("Live2D"),
-    Model("模型"),
-    Settings("设置"),
+private enum class Screen {
+    Live2D,
+    Model,
+    Settings,
+}
+
+private fun Screen.title(): String = when (this) {
+    Screen.Live2D -> I18n.t("nav_live2d")
+    Screen.Model -> I18n.t("nav_model")
+    Screen.Settings -> I18n.t("nav_settings")
 }
 
 private enum class Live2DControlIcon {
@@ -246,7 +253,7 @@ private fun BandoriPetApp(
                                     live2DFullScreen = false
                                 },
                                 icon = { NavIcon(screen) },
-                                label = { Text(screen.title, fontWeight = FontWeight.Bold) },
+                                label = { Text(screen.title(), fontWeight = FontWeight.Bold) },
                             )
                         }
                     }
@@ -310,13 +317,13 @@ private fun BandoriPetApp(
 private fun Header(selectedModel: ModelChoice?) {
     Column {
         Text(
-            text = "Bandori Pet",
+            text = I18n.t("app_title"),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Black,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = selectedModel?.title ?: "选择你的 Live2D 模型",
+            text = selectedModel?.title ?: I18n.t("header_select_model"),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -439,7 +446,7 @@ private fun Live2DStage(
             contentScale = ContentScale.Crop,
         )
         if (selectedModel == null) {
-            EmptyMessage("还没有可展示的模型", "进入“模型”页选择乐队和角色。")
+            EmptyMessage(I18n.t("empty_no_model_title"), I18n.t("empty_no_model_body"))
         } else {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -637,9 +644,9 @@ private fun ModelScreen(
     fun updateCharacterModel(character: CharacterInfo) {
         startCharacterModelTransfer(
             character = character,
-            actionLabel = "正在更新",
-            successMessage = "更新完成，正在载入...",
-            failureMessage = "更新失败",
+            actionLabel = I18n.t("model_updating"),
+            successMessage = I18n.t("model_update_done"),
+            failureMessage = I18n.t("model_update_failed"),
         )
     }
 
@@ -657,8 +664,8 @@ private fun ModelScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SelectionWindow(
-            title = "选择乐队",
-            subtitle = "滑动选择乐队，角色列表会同步更新",
+            title = I18n.t("model_select_band"),
+            subtitle = I18n.t("model_select_band_subtitle"),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(156.dp),
@@ -684,7 +691,7 @@ private fun ModelScreen(
         }
 
         SelectionWindow(
-            title = "选择角色",
+            title = I18n.t("model_select_character"),
             subtitle = selectedBand.display,
             modifier = Modifier
                 .fillMaxWidth()
@@ -731,13 +738,13 @@ private fun ModelScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    text = "角色模型",
+                                    text = I18n.t("model_character_models"),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("更新模型") },
+                                text = { Text(I18n.t("model_update_model")) },
                                 enabled = modelTransfer == null,
                                 leadingIcon = {
                                     Icon(
@@ -751,7 +758,7 @@ private fun ModelScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("删除已下载模型") },
+                                text = { Text(I18n.t("model_delete_model")) },
                                 enabled = hasDownloadedModel,
                                 leadingIcon = {
                                     Icon(
@@ -771,8 +778,8 @@ private fun ModelScreen(
         }
 
         SelectionWindow(
-            title = "选择服装",
-            subtitle = selectedCharacter?.display?.let { "选择${it}的服装" } ?: "当前角色",
+            title = I18n.t("model_select_costume"),
+            subtitle = selectedCharacter?.display?.let { I18n.t("model_select_costume_subtitle", it) } ?: I18n.t("model_current_character"),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(0.9f),
@@ -787,9 +794,9 @@ private fun ModelScreen(
                             selectedCharacter?.let { character ->
                                 startCharacterModelTransfer(
                                     character = character,
-                                    actionLabel = "正在下载",
-                                    successMessage = "下载完成，正在载入...",
-                                    failureMessage = "下载失败",
+                                    actionLabel = I18n.t("model_downloading"),
+                                    successMessage = I18n.t("model_download_done"),
+                                    failureMessage = I18n.t("model_download_failed"),
                                 )
                             }
                         },
@@ -852,7 +859,7 @@ private fun ModelDownloadPrompt(
                 )
                 Spacer(Modifier.width(10.dp))
             }
-            Text(if (transferring) "${transfer?.actionLabel}..." else "下载${character?.display ?: "角色"}模型")
+            Text(if (transferring) "${transfer?.actionLabel}..." else I18n.t("model_download_btn", character?.display ?: I18n.t("model_current_character")))
         }
         transfer?.let { ModelTransferProgress(it) }
         message?.let {
@@ -884,14 +891,14 @@ private fun ModelTransferProgress(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "${transfer.actionLabel}${transfer.characterName}模型",
+                    text = I18n.t("model_progress_header", transfer.actionLabel, transfer.characterName),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = progress?.let { formatTransferSpeed(it.bytesPerSecond) } ?: "连接中...",
+                    text = progress?.let { formatTransferSpeed(it.bytesPerSecond) } ?: I18n.t("model_connecting"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -905,7 +912,7 @@ private fun ModelTransferProgress(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             Text(
-                text = progress?.let { formatTransferProgress(it) } ?: "等待服务器响应...",
+                text = progress?.let { formatTransferProgress(it) } ?: I18n.t("model_waiting"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -915,7 +922,7 @@ private fun ModelTransferProgress(
 
 private fun formatTransferProgress(progress: ZstModelArchive.DownloadProgress): String {
     val downloaded = formatBytes(progress.downloadedBytes.toDouble())
-    val total = progress.totalBytes.takeIf { it > 0 }?.let { formatBytes(it.toDouble()) } ?: "未知大小"
+    val total = progress.totalBytes.takeIf { it > 0 }?.let { formatBytes(it.toDouble()) } ?: I18n.t("model_unknown_size")
     val percent = progress.totalBytes.takeIf { it > 0 }
         ?.let { ((progress.downloadedBytes * 100.0) / it).roundToInt().coerceIn(0, 100) }
     return if (percent != null) "$downloaded / $total，$percent%" else "$downloaded / $total"
@@ -1012,8 +1019,8 @@ private fun SettingsScreen(
             },
         )
         InfoCard(
-            "关于",
-            "Bandori Pet Android。点击 Live2D 展示框会轮换触发模型动作。当前项目使用 GPLv3 许可证发布。",
+            I18n.t("settings_about"),
+            I18n.t("settings_about_text"),
         )
     }
 }
@@ -1028,9 +1035,9 @@ private fun ThemeSettingsCard(
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("主题设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(I18n.t("settings_theme_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "控制应用配色与明暗外观，修改后立即生效。",
+                    I18n.t("settings_theme_desc"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1041,9 +1048,9 @@ private fun ThemeSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("莫奈取色", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_dynamic_color"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (settings.dynamicColorEnabled) "按照系统壁纸动态取色。" else "关闭时使用默认粉色主题。",
+                        if (settings.dynamicColorEnabled) I18n.t("settings_dynamic_color_on") else I18n.t("settings_dynamic_color_off"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1061,7 +1068,7 @@ private fun ThemeSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("深色模式", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_dark_mode"), fontWeight = FontWeight.SemiBold)
                     Text(
                         darkModeDescription(settings.darkMode),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1095,15 +1102,15 @@ private fun ThemeSettingsCard(
 }
 
 private fun darkModeLabel(mode: DarkModeSetting): String = when (mode) {
-    DarkModeSetting.On -> "开启"
-    DarkModeSetting.Off -> "关闭"
-    DarkModeSetting.System -> "跟随系统"
+    DarkModeSetting.On -> I18n.t("settings_dark_mode_on")
+    DarkModeSetting.Off -> I18n.t("settings_dark_mode_off")
+    DarkModeSetting.System -> I18n.t("settings_dark_mode_system")
 }
 
 private fun darkModeDescription(mode: DarkModeSetting): String = when (mode) {
-    DarkModeSetting.On -> "始终使用深色主题。"
-    DarkModeSetting.Off -> "始终使用浅色主题。"
-    DarkModeSetting.System -> "根据系统设置自动切换。"
+    DarkModeSetting.On -> I18n.t("settings_dark_mode_on_desc")
+    DarkModeSetting.Off -> I18n.t("settings_dark_mode_off_desc")
+    DarkModeSetting.System -> I18n.t("settings_dark_mode_system_desc")
 }
 
 private fun openLiveWallpaperPicker(context: android.content.Context) {
@@ -1138,9 +1145,9 @@ private fun FloatingOverlaySettingsCard(
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("悬浮窗设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(I18n.t("settings_floating_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "可添加多个 Live2D 模型到桌面悬浮窗。锁定时不能拖动或双指放大；开启穿透后点击会传给下层应用。",
+                    I18n.t("settings_floating_desc"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1152,14 +1159,14 @@ private fun FloatingOverlaySettingsCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("悬浮窗权限", fontWeight = FontWeight.SemiBold)
+                        Text(I18n.t("settings_floating_permission"), fontWeight = FontWeight.SemiBold)
                         Text(
-                            "需要允许显示在其他应用上层后才能创建悬浮窗。",
+                            I18n.t("settings_floating_permission_desc"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    Button(onClick = ::requestPermission) { Text("去授权") }
+                    Button(onClick = ::requestPermission) { Text(I18n.t("settings_floating_auth")) }
                 }
             }
             Row(
@@ -1168,13 +1175,13 @@ private fun FloatingOverlaySettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("开启悬浮窗", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_floating_enable"), fontWeight = FontWeight.SemiBold)
                     Text(
                         when {
-                            !hasOverlayPermission -> "请先授予悬浮窗权限。"
-                            settings.items.isEmpty() -> "先添加至少一个模型。"
-                            settings.enabled -> "已显示 ${settings.items.size} 个 Live2D 悬浮窗。"
-                            else -> "开启后显示下方列表中的模型。"
+                            !hasOverlayPermission -> I18n.t("settings_floating_no_permission")
+                            settings.items.isEmpty() -> I18n.t("settings_floating_no_items")
+                            settings.enabled -> I18n.t("settings_floating_count", settings.items.size)
+                            else -> I18n.t("settings_floating_enable_desc")
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
@@ -1194,9 +1201,9 @@ private fun FloatingOverlaySettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("悬浮窗锁定", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_floating_lock"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (settings.locked) "当前不能拖动或缩放悬浮窗。" else "当前可单指拖动、双指缩放悬浮窗。",
+                        if (settings.locked) I18n.t("settings_floating_lock_on") else I18n.t("settings_floating_lock_off"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1212,12 +1219,12 @@ private fun FloatingOverlaySettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("悬浮窗穿透", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_floating_touch"), fontWeight = FontWeight.SemiBold)
                     Text(
                         if (settings.touchThrough) {
-                            "点击会穿过悬浮窗传给下层应用，模型本身不能响应点击。"
+                            I18n.t("settings_floating_touch_on")
                         } else {
-                            "关闭时悬浮窗可正常接收点击。"
+                            I18n.t("settings_floating_touch_off")
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
@@ -1236,9 +1243,9 @@ private fun FloatingOverlaySettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("添加当前模型", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_floating_add"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        selectedModel?.title ?: "请先在“模型”页选择一个 Live2D 模型。",
+                        selectedModel?.title ?: I18n.t("settings_floating_no_model"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
@@ -1253,7 +1260,7 @@ private fun FloatingOverlaySettingsCard(
                         onSettingsChanged(next)
                     },
                 ) {
-                    Text("添加")
+                    Text(I18n.t("settings_floating_add_btn"))
                 }
             }
             Row(
@@ -1262,9 +1269,9 @@ private fun FloatingOverlaySettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("重置悬浮窗位置", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_floating_reset"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        "把所有悬浮窗移回默认位置，保留当前大小。",
+                        I18n.t("settings_floating_reset_desc"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1276,12 +1283,12 @@ private fun FloatingOverlaySettingsCard(
                         onSettingsChanged(next)
                     },
                 ) {
-                    Text("重置")
+                    Text(I18n.t("settings_floating_reset_btn"))
                 }
             }
             if (settings.items.isEmpty()) {
                 Text(
-                    "暂无悬浮窗模型。添加后会记住每个窗口最后的位置和大小。",
+                    I18n.t("settings_floating_empty"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1327,12 +1334,12 @@ private fun FloatingOverlayItemRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "位置 ${item.x}, ${item.y} · 大小 ${item.width}×${item.height}",
+                    text = I18n.t("settings_floating_pos", item.x, item.y, item.width, item.height),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            TextButton(onClick = onRemove) { Text("移除") }
+            TextButton(onClick = onRemove) { Text(I18n.t("settings_floating_remove")) }
         }
     }
 }
@@ -1355,9 +1362,9 @@ private fun WallpaperSettingsCard(
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("壁纸设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(I18n.t("settings_wallpaper_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "桌面渲染使用当前选择的 Live2D 模型。桌面上只响应点击动作，位置需要在这里调整。",
+                    I18n.t("settings_wallpaper_desc"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1368,9 +1375,9 @@ private fun WallpaperSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("开启桌面渲染", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_wallpaper_enable"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (enabled) "已允许动态壁纸渲染，系统仍需要选择 Bandori Pet 壁纸。" else "关闭后即使已设为壁纸也不会启动渲染。",
+                        if (enabled) I18n.t("settings_wallpaper_enable_on") else I18n.t("settings_wallpaper_enable_off"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1383,15 +1390,15 @@ private fun WallpaperSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("调整模型位置", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_wallpaper_adjust"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        "全屏后单指拖动，双指缩放，保存后应用到桌面壁纸。",
+                        I18n.t("settings_wallpaper_adjust_desc"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 Button(onClick = onAdjustPosition) {
-                    Text("调整")
+                    Text(I18n.t("settings_wallpaper_adjust_btn"))
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1401,9 +1408,9 @@ private fun WallpaperSettingsCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("壁纸背景", fontWeight = FontWeight.SemiBold)
+                        Text(I18n.t("settings_wallpaper_bg_label"), fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (backgroundUri == null) "使用默认透明背景。" else "已选择照片，只应用到桌面壁纸。",
+                            if (backgroundUri == null) I18n.t("settings_wallpaper_bg_default") else I18n.t("settings_wallpaper_bg_selected"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -1415,12 +1422,12 @@ private fun WallpaperSettingsCard(
                             )
                         },
                     ) {
-                        Text(if (backgroundUri == null) "选择" else "更换")
+                        Text(if (backgroundUri == null) I18n.t("settings_select") else I18n.t("settings_change"))
                     }
                 }
                 if (backgroundUri != null) {
                     TextButton(onClick = { onBackgroundChanged(null) }) {
-                        Text("清除背景")
+                        Text(I18n.t("settings_clear_bg"))
                     }
                 }
             }
@@ -1443,9 +1450,9 @@ private fun RenderSettingsCard(
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Live2D 设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(I18n.t("settings_live2d_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "这些选项会立即应用并自动保存。",
+                    I18n.t("settings_live2d_desc"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1456,7 +1463,7 @@ private fun RenderSettingsCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("模型渲染 FPS 限制", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_fps_limit"), fontWeight = FontWeight.SemiBold)
                     Text(
                         "${settings.fpsLimit} FPS",
                         color = MaterialTheme.colorScheme.primary,
@@ -1479,9 +1486,9 @@ private fun RenderSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("垂直同步", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_vsync"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (settings.vsyncEnabled) "跟随屏幕刷新，减少画面撕裂。" else "关闭后只受 FPS 限制影响。",
+                        if (settings.vsyncEnabled) I18n.t("settings_vsync_on") else I18n.t("settings_vsync_off"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1497,12 +1504,12 @@ private fun RenderSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("视线跟随", fontWeight = FontWeight.SemiBold)
+                    Text(I18n.t("settings_gaze"), fontWeight = FontWeight.SemiBold)
                     Text(
                         if (settings.gazeFollowEnabled) {
-                            "点击 Live2D 或桌面壁纸时，模型会看向点击位置。"
+                            I18n.t("settings_gaze_on")
                         } else {
-                            "关闭时点击只触发原本的动作反馈。"
+                            I18n.t("settings_gaze_off")
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
@@ -1520,9 +1527,9 @@ private fun RenderSettingsCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("Live2D 背景", fontWeight = FontWeight.SemiBold)
+                        Text(I18n.t("settings_bg_label"), fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (settings.backgroundUri == null) "使用默认渐变背景。" else "已选择照片，只应用到 Live2D 预览。",
+                            if (settings.backgroundUri == null) I18n.t("settings_bg_default") else I18n.t("settings_bg_selected"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -1534,12 +1541,12 @@ private fun RenderSettingsCard(
                             )
                         },
                     ) {
-                        Text(if (settings.backgroundUri == null) "选择" else "更换")
+                        Text(if (settings.backgroundUri == null) I18n.t("settings_select") else I18n.t("settings_change"))
                     }
                 }
                 if (settings.backgroundUri != null) {
                     TextButton(onClick = { onSettingsChanged(settings.copy(backgroundUri = null)) }) {
-                        Text("清除背景")
+                        Text(I18n.t("settings_clear_bg"))
                     }
                 }
             }
@@ -1739,7 +1746,7 @@ private fun NavIcon(screen: Screen) {
             Screen.Model -> Icons.Outlined.ViewInAr
             Screen.Settings -> Icons.Outlined.Settings
         },
-        contentDescription = screen.title,
+        contentDescription = screen.title(),
     )
 }
 

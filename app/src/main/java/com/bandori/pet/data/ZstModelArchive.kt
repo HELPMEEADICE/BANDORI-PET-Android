@@ -1,6 +1,7 @@
 package com.bandori.pet.data
 
 import android.content.Context
+import com.bandori.pet.I18n
 import com.github.luben.zstd.ZstdInputStream
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -40,8 +41,8 @@ object ZstModelArchive {
         onProgress: ((DownloadProgress) -> Unit)? = null,
     ): File {
         val target = downloadedArchiveFile(context, characterId)
-        val parent = target.parentFile ?: throw IOException("无法创建模型下载目录")
-        if (!parent.exists() && !parent.mkdirs()) throw IOException("无法创建模型下载目录")
+        val parent = target.parentFile ?: throw IOException(I18n.t("error_create_download_dir"))
+        if (!parent.exists() && !parent.mkdirs()) throw IOException(I18n.t("error_create_download_dir"))
         val temp = File(parent, "${target.name}.download")
         if (temp.exists()) temp.delete()
 
@@ -51,7 +52,7 @@ object ZstModelArchive {
         connection.instanceFollowRedirects = true
         try {
             val code = connection.responseCode
-            if (code !in 200..299) throw IOException("下载失败：HTTP $code")
+            if (code !in 200..299) throw IOException(I18n.t("error_download_http", code))
             val totalBytes = connection.contentLengthLong.takeIf { it > 0 } ?: -1L
             connection.inputStream.use { input ->
                 temp.outputStream().use { output ->
@@ -91,9 +92,9 @@ object ZstModelArchive {
 
         if (temp.length() == 0L) {
             temp.delete()
-            throw IOException("下载内容为空")
+            throw IOException(I18n.t("error_download_empty"))
         }
-        if (target.exists() && !target.delete()) throw IOException("无法替换已有模型文件")
+        if (target.exists() && !target.delete()) throw IOException(I18n.t("error_replace_model_file"))
         if (!temp.renameTo(target)) {
             temp.copyTo(target, overwrite = true)
             if (!temp.delete()) temp.deleteOnExit()
