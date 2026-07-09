@@ -56,6 +56,15 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+        resources {
+            excludes += setOf(
+                "darwin/**",
+                "win/**",
+                "linux/**",
+                "aix/**",
+                "freebsd/**",
+            )
+        }
     }
 }
 
