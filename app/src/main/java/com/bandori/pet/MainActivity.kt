@@ -1,10 +1,14 @@
 package com.bandori.pet
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -103,6 +107,7 @@ import kotlin.math.roundToInt
 private const val SETTINGS_PREFS = "bandori_pet_settings"
 private const val KEY_FPS_LIMIT = "fps_limit"
 private const val KEY_VSYNC_ENABLED = "vsync_enabled"
+private const val KEY_LIVE2D_BACKGROUND_URI = "live2d_background_uri"
 private const val KEY_SELECTED_CHARACTER_ID = "selected_character_id"
 private const val KEY_SELECTED_MODEL_ASSET_PATH = "selected_model_asset_path"
 
@@ -131,12 +136,20 @@ private fun saveModelSelection(context: Context, characterId: String, model: Mod
 private data class RenderSettings(
     val fpsLimit: Int = 60,
     val vsyncEnabled: Boolean = true,
+    val backgroundUri: String? = null,
 ) {
     fun save(context: Context) {
         context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putInt(KEY_FPS_LIMIT, fpsLimit)
             .putBoolean(KEY_VSYNC_ENABLED, vsyncEnabled)
+            .apply {
+                if (backgroundUri.isNullOrBlank()) {
+                    remove(KEY_LIVE2D_BACKGROUND_URI)
+                } else {
+                    putString(KEY_LIVE2D_BACKGROUND_URI, backgroundUri)
+                }
+            }
             .apply()
     }
 
@@ -146,8 +159,18 @@ private data class RenderSettings(
             return RenderSettings(
                 fpsLimit = prefs.getInt(KEY_FPS_LIMIT, 60).coerceIn(15, 120),
                 vsyncEnabled = prefs.getBoolean(KEY_VSYNC_ENABLED, true),
+                backgroundUri = prefs.getString(KEY_LIVE2D_BACKGROUND_URI, null),
             )
         }
+    }
+}
+
+private fun persistBackgroundUri(context: Context, uri: Uri) {
+    runCatching {
+        context.contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
     }
 }
 
@@ -443,6 +466,11 @@ private fun Live2DStage(
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
         contentAlignment = Alignment.Center,
     ) {
+        ContentUriImage(
+            uri = renderSettings.backgroundUri,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
         if (selectedModel == null) {
             EmptyMessage("还没有可展示的模型", "进入“模型”页选择乐队和角色。")
         } else {
@@ -967,12 +995,19 @@ private fun RenderSettingsCard(
     settings: RenderSettings,
     onSettingsChanged: (RenderSettings) -> Unit,
 ) {
+    val context = LocalContext.current
+    val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        persistBackgroundUri(context.applicationContext, uri)
+        onSettingsChanged(settings.copy(backgroundUri = uri.toString()))
+    }
+
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("渲染设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Live2D 设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "这些选项会立即应用到 Live2D 渲染线程，并自动保存。",
+                    "这些选项会立即应用并自动保存。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1017,6 +1052,30 @@ private fun RenderSettingsCard(
                     checked = settings.vsyncEnabled,
                     onCheckedChange = { enabled -> onSettingsChanged(settings.copy(vsyncEnabled = enabled)) },
                 )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Live2D 背景", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (settings.backgroundUri == null) "使用默认渐变背景。" else "已选择照片，重启后仍会保留。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Button(onClick = { backgroundPicker.launch(arrayOf("image/*")) }) {
+                        Text(if (settings.backgroundUri == null) "选择照片" else "更换")
+                    }
+                }
+                if (settings.backgroundUri != null) {
+                    TextButton(onClick = { onSettingsChanged(settings.copy(backgroundUri = null)) }) {
+                        Text("清除背景")
+                    }
+                }
             }
         }
     }
@@ -1254,5 +1313,22 @@ private fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, co
                 fontWeight = FontWeight.Black,
             )
         }
+    }
+}
+
+@Composable
+private fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale) {
+    val context = LocalContext.current
+    val bitmap = remember(uri) {
+        uri?.let {
+            runCatching {
+                context.contentResolver.openInputStream(Uri.parse(it))?.use { input ->
+                    BitmapFactory.decodeStream(input)?.asImageBitmap()
+                }
+            }.getOrNull()
+        }
+    }
+    if (bitmap != null) {
+        Image(bitmap = bitmap, contentDescription = null, modifier = modifier, contentScale = contentScale)
     }
 }

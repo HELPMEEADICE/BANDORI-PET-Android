@@ -1,6 +1,7 @@
 package com.bandori.pet.live2d
 
 import android.content.Context
+import android.graphics.PixelFormat
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -40,6 +41,7 @@ class Live2DRenderView @JvmOverloads constructor(
     var interactionChanged: (() -> Unit)? = null
 
     init {
+        holder.setFormat(PixelFormat.TRANSLUCENT)
         holder.addCallback(this)
         setOnTouchListener { _, event -> handleTouch(event) }
     }
