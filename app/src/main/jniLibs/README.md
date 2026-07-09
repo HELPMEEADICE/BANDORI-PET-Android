@@ -16,6 +16,7 @@ make -j$(nproc) \
   HOST_CC="gcc" \
   CROSS="$TOOL/aarch64-linux-android23-" \
   TARGET_SYS=Linux \
-  XCFLAGS="-DLUAJIT_ENABLE_GC64"
+  XCFLAGS="-DLUAJIT_ENABLE_GC64" \
+  TARGET_SHLDFLAGS="-Wl,-z,max-page-size=0x4000"
 cp src/libluajit.so app/src/main/jniLibs/arm64-v8a/libluajit.so
 ```
