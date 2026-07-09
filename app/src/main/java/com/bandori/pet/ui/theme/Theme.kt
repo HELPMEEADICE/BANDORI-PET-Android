@@ -1,11 +1,15 @@
 package com.bandori.pet.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 
 private val LightColors = lightColorScheme(
@@ -51,9 +55,17 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun BandoriPetTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colors: ColorScheme = if (darkTheme) DarkColors else LightColors
+    val colors: ColorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val context = LocalContext.current
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else if (darkTheme) {
+        DarkColors
+    } else {
+        LightColors
+    }
     MaterialTheme(
         colorScheme = colors,
         typography = MaterialTheme.typography,

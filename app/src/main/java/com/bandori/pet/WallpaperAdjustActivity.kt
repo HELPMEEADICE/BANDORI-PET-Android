@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +61,11 @@ class WallpaperAdjustActivity : ComponentActivity() {
                 View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         setContent {
-            BandoriPetTheme {
+            val themeSettings = remember { ThemeSettings.load(applicationContext) }
+            BandoriPetTheme(
+                darkTheme = themeSettings.darkMode.resolveDarkTheme(isSystemInDarkTheme()),
+                dynamicColor = themeSettings.dynamicColorEnabled,
+            ) {
                 WallpaperAdjustScreen(onClose = { finish() })
             }
         }

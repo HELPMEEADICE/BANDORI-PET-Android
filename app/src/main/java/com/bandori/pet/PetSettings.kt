@@ -18,6 +18,48 @@ const val KEY_WALLPAPER_ENABLED = "wallpaper_enabled"
 const val KEY_WALLPAPER_OFFSET_X = "wallpaper_offset_x"
 const val KEY_WALLPAPER_OFFSET_Y = "wallpaper_offset_y"
 const val KEY_WALLPAPER_SCALE = "wallpaper_scale"
+const val KEY_DYNAMIC_COLOR_ENABLED = "dynamic_color_enabled"
+const val KEY_DARK_MODE = "dark_mode"
+
+enum class DarkModeSetting(val value: String) {
+    On("on"),
+    Off("off"),
+    System("system"),
+    ;
+
+    companion object {
+        fun fromValue(value: String?): DarkModeSetting = entries.firstOrNull { it.value == value } ?: System
+    }
+}
+
+data class ThemeSettings(
+    val dynamicColorEnabled: Boolean = false,
+    val darkMode: DarkModeSetting = DarkModeSetting.System,
+) {
+    fun save(context: Context) {
+        context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_DYNAMIC_COLOR_ENABLED, dynamicColorEnabled)
+            .putString(KEY_DARK_MODE, darkMode.value)
+            .apply()
+    }
+
+    companion object {
+        fun load(context: Context): ThemeSettings {
+            val prefs = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            return ThemeSettings(
+                dynamicColorEnabled = prefs.getBoolean(KEY_DYNAMIC_COLOR_ENABLED, false),
+                darkMode = DarkModeSetting.fromValue(prefs.getString(KEY_DARK_MODE, null)),
+            )
+        }
+    }
+}
+
+fun DarkModeSetting.resolveDarkTheme(systemDark: Boolean): Boolean = when (this) {
+    DarkModeSetting.On -> true
+    DarkModeSetting.Off -> false
+    DarkModeSetting.System -> systemDark
+}
 
 data class RenderSettings(
     val fpsLimit: Int = 60,

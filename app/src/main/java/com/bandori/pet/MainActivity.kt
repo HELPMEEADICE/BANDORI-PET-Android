@@ -16,6 +16,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -115,9 +116,21 @@ import kotlin.math.roundToInt
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val appContext = applicationContext
         setContent {
-            BandoriPetTheme {
-                BandoriPetApp()
+            var themeSettings by remember { mutableStateOf(ThemeSettings.load(appContext)) }
+            val darkTheme = themeSettings.darkMode.resolveDarkTheme(isSystemInDarkTheme())
+            BandoriPetTheme(
+                darkTheme = darkTheme,
+                dynamicColor = themeSettings.dynamicColorEnabled,
+            ) {
+                BandoriPetApp(
+                    themeSettings = themeSettings,
+                    onThemeSettingsChanged = { settings ->
+                        themeSettings = settings
+                        settings.save(appContext)
+                    },
+                )
             }
         }
     }
@@ -144,7 +157,10 @@ private data class ModelTransferState(
 )
 
 @Composable
-private fun BandoriPetApp() {
+private fun BandoriPetApp(
+    themeSettings: ThemeSettings,
+    onThemeSettingsChanged: (ThemeSettings) -> Unit,
+) {
     val context = LocalContext.current
     val appContext = context.applicationContext
     var appData by remember { mutableStateOf<AppData?>(null) }
@@ -275,6 +291,8 @@ private fun BandoriPetApp() {
                                 onModelAssetsChanged = { modelAssetsVersion += 1 },
                             )
                             Screen.Settings -> SettingsScreen(
+                                themeSettings = themeSettings,
+                                onThemeSettingsChanged = onThemeSettingsChanged,
                                 renderSettings = renderSettings,
                                 onRenderSettingsChanged = updateRenderSettings,
                             )
@@ -919,6 +937,8 @@ private fun formatBytes(bytes: Double): String {
 
 @Composable
 private fun SettingsScreen(
+    themeSettings: ThemeSettings,
+    onThemeSettingsChanged: (ThemeSettings) -> Unit,
     renderSettings: RenderSettings,
     onRenderSettingsChanged: (RenderSettings) -> Unit,
 ) {
@@ -933,6 +953,10 @@ private fun SettingsScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        ThemeSettingsCard(
+            settings = themeSettings,
+            onSettingsChanged = onThemeSettingsChanged,
+        )
         RenderSettingsCard(
             settings = renderSettings,
             onSettingsChanged = onRenderSettingsChanged,
@@ -958,6 +982,94 @@ private fun SettingsScreen(
             "Bandori Pet Android。点击 Live2D 展示框会轮换触发模型动作。当前项目使用 GPLv3 许可证发布。",
         )
     }
+}
+
+@Composable
+private fun ThemeSettingsCard(
+    settings: ThemeSettings,
+    onSettingsChanged: (ThemeSettings) -> Unit,
+) {
+    var darkModeMenuExpanded by remember { mutableStateOf(false) }
+
+    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("主题设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "控制应用配色与明暗外观，修改后立即生效。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("莫奈取色", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.dynamicColorEnabled) "按照系统壁纸动态取色。" else "关闭时使用默认粉色主题。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = settings.dynamicColorEnabled,
+                    onCheckedChange = { enabled ->
+                        onSettingsChanged(settings.copy(dynamicColorEnabled = enabled))
+                    },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("深色模式", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        darkModeDescription(settings.darkMode),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Box {
+                    TextButton(onClick = { darkModeMenuExpanded = true }) {
+                        Text(darkModeLabel(settings.darkMode))
+                    }
+                    DropdownMenu(
+                        expanded = darkModeMenuExpanded,
+                        onDismissRequest = { darkModeMenuExpanded = false },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        DarkModeSetting.entries.forEach { mode ->
+                            DropdownMenuItem(
+                                text = { Text(darkModeLabel(mode)) },
+                                onClick = {
+                                    darkModeMenuExpanded = false
+                                    onSettingsChanged(settings.copy(darkMode = mode))
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun darkModeLabel(mode: DarkModeSetting): String = when (mode) {
+    DarkModeSetting.On -> "开启"
+    DarkModeSetting.Off -> "关闭"
+    DarkModeSetting.System -> "跟随系统"
+}
+
+private fun darkModeDescription(mode: DarkModeSetting): String = when (mode) {
+    DarkModeSetting.On -> "始终使用深色主题。"
+    DarkModeSetting.Off -> "始终使用浅色主题。"
+    DarkModeSetting.System -> "根据系统设置自动切换。"
 }
 
 private fun openLiveWallpaperPicker(context: android.content.Context) {
