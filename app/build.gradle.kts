@@ -80,6 +80,7 @@ val syncLive2DAssets by tasks.registering(Sync::class) {
         exclude("**/venv/**")
         exclude("**/frames_output/**")
         exclude("**/*.md")
+        exclude("**/*.png")
         exclude("**/tests/**")
         exclude("**/test-data/**")
         exclude("**/resources/**")
