@@ -1,11 +1,11 @@
 package com.bandori.pet.live2d
 
 import android.content.Context
-import android.graphics.PixelFormat
+import android.graphics.SurfaceTexture
 import android.util.AttributeSet
 import android.view.MotionEvent
-import android.view.SurfaceHolder
-import android.view.SurfaceView
+import android.view.Surface
+import android.view.TextureView
 import com.bandori.pet.data.ModelChoice
 import kotlin.math.hypot
 import kotlin.math.max
@@ -19,9 +19,10 @@ import kotlinx.coroutines.launch
 class Live2DRenderView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-) : SurfaceView(context, attrs), SurfaceHolder.Callback {
+) : TextureView(context, attrs), TextureView.SurfaceTextureListener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var handle = 0L
+    private var renderSurface: Surface? = null
     private var runtimeRoot: String? = null
     private var selectedModel: ModelChoice? = null
     private var loading = false
@@ -41,8 +42,8 @@ class Live2DRenderView @JvmOverloads constructor(
     var interactionChanged: (() -> Unit)? = null
 
     init {
-        holder.setFormat(PixelFormat.TRANSLUCENT)
-        holder.addCallback(this)
+        setOpaque(false)
+        surfaceTextureListener = this
         setOnTouchListener { _, event -> handleTouch(event) }
     }
 
@@ -69,31 +70,44 @@ class Live2DRenderView @JvmOverloads constructor(
         if (handle != 0L) NativeLive2D.setRenderOptions(handle, nextFpsLimit, vsyncEnabled)
     }
 
-    override fun surfaceCreated(holder: SurfaceHolder) {
+    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+        renderSurface?.release()
+        renderSurface = Surface(surface)
         loadSelectedModel()
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
         if (handle != 0L) NativeLive2D.resize(handle, width, height)
     }
 
-    override fun surfaceDestroyed(holder: SurfaceHolder) {
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+
+    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+        destroyRenderer()
+        renderSurface?.release()
+        renderSurface = null
+        return true
+    }
+
+    fun release() {
+        surfaceTextureListener = null
+        destroyRenderer()
+        renderSurface?.release()
+        renderSurface = null
+        scope.cancel()
+    }
+
+    private fun destroyRenderer() {
         if (handle != 0L) {
             NativeLive2D.destroy(handle)
             handle = 0L
         }
     }
 
-    fun release() {
-        holder.removeCallback(this)
-        if (handle != 0L) NativeLive2D.destroy(handle)
-        handle = 0L
-        scope.cancel()
-    }
-
     private fun loadSelectedModel() {
         val model = selectedModel ?: return
-        if (!holder.surface.isValid || loading) return
+        val surface = renderSurface ?: return
+        if (!surface.isValid || loading) return
 
         loading = true
         statusChanged?.invoke("正在准备 Live2D 资源...")
@@ -104,7 +118,7 @@ class Live2DRenderView @JvmOverloads constructor(
                         if (handle != 0L) NativeLive2D.destroy(handle)
                         runtimeRoot = prepared.runtimeRoot
                         handle = NativeLive2D.create(
-                            holder.surface,
+                            surface,
                             prepared.runtimeRoot,
                             width.coerceAtLeast(1),
                             height.coerceAtLeast(1),
