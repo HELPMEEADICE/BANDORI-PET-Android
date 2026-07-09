@@ -103,10 +103,17 @@ class Live2DWallpaperService : WallpaperService() {
             val generation = ++loadGeneration
             loading = true
             scope.launch {
-                runCatching { AssetSync.prepareModel(applicationContext, model.modelAssetPath) }
-                    .onSuccess { prepared ->
-                        val activeSurface = surfaceHolderRef?.surface ?: return@onSuccess
-                        if (generation != loadGeneration || !visible || !surfaceReady || !activeSurface.isValid) return@onSuccess
+                val prepared = runCatching { AssetSync.prepareModel(applicationContext, model.modelAssetPath) }
+                    .onFailure { Log.e("BandoriPet", "Failed to prepare wallpaper model", it) }
+                    .getOrNull()
+                if (prepared != null) {
+                    if (generation == loadGeneration && visible && surfaceReady) {
+                        val background = NativeLive2D.loadBackground(applicationContext, wallpaperBackgroundUri)
+                        val activeSurface = surfaceHolderRef?.surface
+                        if (generation != loadGeneration || !visible || !surfaceReady || activeSurface?.isValid != true) {
+                            loading = false
+                            return@launch
+                        }
                         if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
                             destroyHandle()
                             runtimeRoot = prepared.runtimeRoot
@@ -118,11 +125,11 @@ class Live2DWallpaperService : WallpaperService() {
                                 settings.fpsLimit,
                                 settings.vsyncEnabled,
                             )
-                            NativeLive2D.setBackground(applicationContext, handle, wallpaperBackgroundUri)
+                            NativeLive2D.setBackground(handle, background)
                             applyWallpaperTransform()
                         } else {
                             NativeLive2D.setRenderOptions(handle, settings.fpsLimit, settings.vsyncEnabled)
-                            NativeLive2D.setBackground(applicationContext, handle, wallpaperBackgroundUri)
+                            NativeLive2D.setBackground(handle, background)
                         }
                         if (handle != 0L) {
                             NativeLive2D.loadModel(
@@ -133,7 +140,7 @@ class Live2DWallpaperService : WallpaperService() {
                             )
                         }
                     }
-                    .onFailure { Log.e("BandoriPet", "Failed to prepare wallpaper model", it) }
+                }
                 loading = false
             }
         }

@@ -7,6 +7,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 object AssetSync {
+    private val runtimeCopyLock = Any()
+
     suspend fun prepareModel(context: Context, modelAssetPath: String): PreparedModel = withContext(Dispatchers.IO) {
         val root = File(context.filesDir, "live2d_assets")
         val runtimeRoot = File(root, "third_party/Live2D-v2-Lua")
@@ -27,13 +29,24 @@ object AssetSync {
     }
 
     private fun copyRuntimeIfNeeded(context: Context, runtimeRoot: File) {
-        val marker = File(runtimeRoot, ".copied")
-        val packageTime = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
-        if (marker.exists() && marker.readText() == packageTime) return
+        synchronized(runtimeCopyLock) {
+            val marker = File(runtimeRoot, ".copied")
+            val packageTime = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+            if (marker.exists() && marker.readText() == packageTime) return
 
-        if (runtimeRoot.exists()) runtimeRoot.deleteRecursively()
-        copyTree(context, "third_party/Live2D-v2-Lua", runtimeRoot)
-        marker.writeText(packageTime)
+            val parent = runtimeRoot.parentFile ?: return
+            parent.mkdirs()
+            val tempRoot = File(parent, "${runtimeRoot.name}.tmp")
+            if (tempRoot.exists()) tempRoot.deleteRecursively()
+            copyTree(context, "third_party/Live2D-v2-Lua", tempRoot)
+            File(tempRoot, ".copied").writeText(packageTime)
+
+            if (runtimeRoot.exists()) runtimeRoot.deleteRecursively()
+            if (!tempRoot.renameTo(runtimeRoot)) {
+                tempRoot.copyRecursively(runtimeRoot, overwrite = true)
+                tempRoot.deleteRecursively()
+            }
+        }
     }
 
     private fun copyTree(context: Context, assetPath: String, target: File) {

@@ -33,6 +33,7 @@ class Live2DRenderView @JvmOverloads constructor(
     private var runtimeRoot: String? = null
     private var selectedModel: ModelChoice? = null
     private var loading = false
+    private var loadGeneration = 0
     private var interactionLocked = true
     private var fpsLimit = 60
     private var vsyncEnabled = true
@@ -62,8 +63,9 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     fun setModel(model: ModelChoice?) {
-        if (selectedModel == model && handle != 0L) return
+        if (selectedModel == model && handle != 0L && !loading) return
         selectedModel = model
+        loadGeneration += 1
         loadSelectedModel()
     }
 
@@ -132,10 +134,12 @@ class Live2DRenderView @JvmOverloads constructor(
         if (!surface.isValid || loading) return
 
         loading = true
+        val generation = loadGeneration
         statusChanged?.invoke(I18n.t("status_preparing"))
         scope.launch {
-            runCatching { AssetSync.prepareModel(context.applicationContext, model.modelAssetPath) }
-                .onSuccess { prepared ->
+            val result = runCatching { AssetSync.prepareModel(context.applicationContext, model.modelAssetPath) }
+            if (selectedModel == model && generation == loadGeneration && renderSurface == surface && surface.isValid) {
+                result.onSuccess { prepared ->
                     if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
                         if (handle != 0L) NativeLive2D.destroy(handle)
                         runtimeRoot = prepared.runtimeRoot
@@ -164,8 +168,10 @@ class Live2DRenderView @JvmOverloads constructor(
                         },
                     )
                 }
-                .onFailure { statusChanged?.invoke(it.message ?: I18n.t("status_resource_failed")) }
+                    .onFailure { statusChanged?.invoke(it.message ?: I18n.t("status_resource_failed")) }
+            }
             loading = false
+            if (selectedModel != model || generation != loadGeneration) loadSelectedModel()
         }
     }
 

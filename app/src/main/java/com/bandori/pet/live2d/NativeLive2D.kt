@@ -6,6 +6,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.Surface
 import com.bandori.pet.I18n
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 object NativeLive2D {
@@ -33,23 +35,36 @@ object NativeLive2D {
     external fun lastError(handle: Long): String
     external fun destroy(handle: Long)
 
-    fun setBackground(context: Context, handle: Long, uri: String?) {
-        if (handle == 0L || uri.isNullOrBlank()) {
-            setBackgroundPixels(handle, null, 0, 0)
-            return
+    suspend fun loadBackground(context: Context, uri: String?): BackgroundPixels? {
+        if (uri.isNullOrBlank()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val bitmap = decodeBackground(context, Uri.parse(uri))
+                try {
+                    val pixels = IntArray(bitmap.width * bitmap.height)
+                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                    BackgroundPixels(pixels, bitmap.width, bitmap.height)
+                } finally {
+                    bitmap.recycle()
+                }
+            }.getOrNull()
         }
-
-        runCatching { decodeBackground(context, Uri.parse(uri)) }
-            .onSuccess { bitmap ->
-                val pixels = IntArray(bitmap.width * bitmap.height)
-                bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                setBackgroundPixels(handle, pixels, bitmap.width, bitmap.height)
-                bitmap.recycle()
-            }
-            .onFailure {
-                setBackgroundPixels(handle, null, 0, 0)
-            }
     }
+
+    fun setBackground(handle: Long, background: BackgroundPixels?) {
+        if (handle == 0L) return
+        if (background != null) {
+            setBackgroundPixels(handle, background.pixels, background.width, background.height)
+        } else {
+            setBackgroundPixels(handle, null, 0, 0)
+        }
+    }
+
+    data class BackgroundPixels(
+        val pixels: IntArray,
+        val width: Int,
+        val height: Int,
+    )
 
     private fun decodeBackground(context: Context, uri: Uri): Bitmap {
         val resolver = context.contentResolver

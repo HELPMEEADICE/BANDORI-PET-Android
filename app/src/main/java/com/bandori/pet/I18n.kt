@@ -22,12 +22,12 @@ object I18n {
                 locale.language.equals("ja", ignoreCase = true) -> "ja"
                 else -> "en"
             }
-            val assetPath = "lang/$lang.json"
-            val fallbackPaths = listOfNotNull(
-                if (lang != "zh") "zh" else null,
-                if (lang != "en") "en" else null,
-            )
-            loadFromAssets(context, assetPath) || fallbackPaths.any { loadFromAssets(context, "lang/$it.json") }
+            val languages = when (lang) {
+                "zh" -> listOf("en", "zh")
+                "en" -> listOf("zh", "en")
+                else -> listOf("zh", "en", lang)
+            }
+            languages.forEach { loadFromAssets(context, "lang/$it.json") }
             initialized = true
         }
     }

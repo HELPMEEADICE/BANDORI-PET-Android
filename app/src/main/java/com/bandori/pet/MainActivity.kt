@@ -85,6 +85,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -1756,16 +1757,20 @@ private val ModelChoice.isMoc3: Boolean
 @Composable
 private fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, contentScale: ContentScale, placeholderText: String? = null) {
     val context = LocalContext.current
-    val bitmap = remember(path, reloadKey) {
-        path?.let {
-            runCatching {
-                context.assets.open(it).use { input -> BitmapFactory.decodeStream(input)?.asImageBitmap() }
-            }.getOrNull() ?: ZstModelArchive.readLogicalPath(context, it)
-                ?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
+    val appContext = context.applicationContext
+    var bitmap by remember(path, reloadKey) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(path, reloadKey) {
+        bitmap = path?.let {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    appContext.assets.open(it).use { input -> BitmapFactory.decodeStream(input)?.asImageBitmap() }
+                }.getOrNull() ?: ZstModelArchive.readLogicalPath(appContext, it)
+                    ?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
+            }
         }
     }
     if (bitmap != null) {
-        Image(bitmap = bitmap, contentDescription = null, modifier = modifier, contentScale = contentScale)
+        Image(bitmap = bitmap!!, contentDescription = null, modifier = modifier, contentScale = contentScale)
     } else {
         Box(
             modifier = modifier.background(
@@ -1792,16 +1797,20 @@ private fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, co
 @Composable
 internal fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale) {
     val context = LocalContext.current
-    val bitmap = remember(uri) {
-        uri?.let {
-            runCatching {
-                context.contentResolver.openInputStream(Uri.parse(it))?.use { input ->
-                    BitmapFactory.decodeStream(input)?.asImageBitmap()
-                }
-            }.getOrNull()
+    val appContext = context.applicationContext
+    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(uri) {
+        bitmap = uri?.let {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    appContext.contentResolver.openInputStream(Uri.parse(it))?.use { input ->
+                        BitmapFactory.decodeStream(input)?.asImageBitmap()
+                    }
+                }.getOrNull()
+            }
         }
     }
     if (bitmap != null) {
-        Image(bitmap = bitmap, contentDescription = null, modifier = modifier, contentScale = contentScale)
+        Image(bitmap = bitmap!!, contentDescription = null, modifier = modifier, contentScale = contentScale)
     }
 }
