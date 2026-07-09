@@ -101,6 +101,30 @@ import kotlin.math.roundToInt
 private const val SETTINGS_PREFS = "bandori_pet_settings"
 private const val KEY_FPS_LIMIT = "fps_limit"
 private const val KEY_VSYNC_ENABLED = "vsync_enabled"
+private const val KEY_SELECTED_CHARACTER_ID = "selected_character_id"
+private const val KEY_SELECTED_MODEL_ASSET_PATH = "selected_model_asset_path"
+
+private fun loadSelectedCharacterId(context: Context): String =
+    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getString(KEY_SELECTED_CHARACTER_ID, "kasumi") ?: "kasumi"
+
+private fun loadSelectedModelAssetPath(context: Context): String? =
+    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getString(KEY_SELECTED_MODEL_ASSET_PATH, null)
+
+private fun saveModelSelection(context: Context, characterId: String, model: ModelChoice?) {
+    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(KEY_SELECTED_CHARACTER_ID, characterId)
+        .apply {
+            if (model == null) {
+                remove(KEY_SELECTED_MODEL_ASSET_PATH)
+            } else {
+                putString(KEY_SELECTED_MODEL_ASSET_PATH, model.modelAssetPath)
+            }
+        }
+        .apply()
+}
 
 private data class RenderSettings(
     val fpsLimit: Int = 60,
@@ -152,29 +176,52 @@ private enum class Live2DControlIcon {
 @Composable
 private fun BandoriPetApp() {
     val context = LocalContext.current
+    val appContext = context.applicationContext
     var appData by remember { mutableStateOf<AppData?>(null) }
     var selectedScreen by remember { mutableStateOf(Screen.Live2D) }
     var selectedBandId by remember { mutableStateOf<String?>(null) }
-    var selectedCharacterId by remember { mutableStateOf("kasumi") }
+    var selectedCharacterId by remember { mutableStateOf(loadSelectedCharacterId(appContext)) }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
+    var preferredModelAssetPath by remember { mutableStateOf(loadSelectedModelAssetPath(appContext)) }
     var live2DFullScreen by remember { mutableStateOf(false) }
     var modelAssetsVersion by remember { mutableStateOf(0) }
-    var renderSettings by remember { mutableStateOf(RenderSettings.load(context.applicationContext)) }
+    var renderSettings by remember { mutableStateOf(RenderSettings.load(appContext)) }
     val updateRenderSettings: (RenderSettings) -> Unit = { settings ->
         renderSettings = settings
-        settings.save(context.applicationContext)
+        settings.save(appContext)
+    }
+    val selectCharacterModel: (String, ModelChoice?) -> Unit = { characterId, model ->
+        selectedCharacterId = characterId
+        selectedModel = model
+        preferredModelAssetPath = model?.modelAssetPath
+        saveModelSelection(appContext, characterId, model)
     }
 
     LaunchedEffect(modelAssetsVersion) {
-        val repository = DataRepository(context.applicationContext)
+        val repository = DataRepository(appContext)
         val data = withContext(Dispatchers.IO) { repository.load() }
         appData = data
-        selectedBandId = data.bands.firstOrNull { selectedCharacterId in it.characters }?.id ?: data.bands.firstOrNull()?.id
+        val activeCharacterId = when {
+            data.characters.containsKey(selectedCharacterId) -> selectedCharacterId
+            data.characters.containsKey("kasumi") -> "kasumi"
+            else -> data.bands.firstOrNull()
+                ?.characters
+                ?.firstOrNull { it in data.characters }
+                ?: data.characters.keys.firstOrNull()
+        } ?: selectedCharacterId
+        selectedCharacterId = activeCharacterId
+        selectedBandId = data.bands.firstOrNull { activeCharacterId in it.characters }?.id ?: data.bands.firstOrNull()?.id
         val models = withContext(Dispatchers.IO) {
-            data.characters[selectedCharacterId]?.let { repository.availableModels(it) }.orEmpty()
+            data.characters[activeCharacterId]?.let { repository.availableModels(it) }.orEmpty()
         }
-        selectedModel = selectedModel?.takeIf { current -> models.any { it.modelAssetPath == current.modelAssetPath } }
+        val restoredModel = selectedModel?.takeIf { current ->
+            current.characterId == activeCharacterId && models.any { it.modelAssetPath == current.modelAssetPath }
+        }
+            ?: preferredModelAssetPath?.let { path -> models.firstOrNull { it.modelAssetPath == path } }
             ?: models.firstOrNull()
+        selectedModel = restoredModel
+        preferredModelAssetPath = restoredModel?.modelAssetPath
+        saveModelSelection(appContext, activeCharacterId, restoredModel)
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -234,16 +281,18 @@ private fun BandoriPetApp() {
                                 onBandSelected = { band ->
                                     selectedBandId = band.id
                                     band.characters.firstOrNull()?.let { characterId ->
-                                        selectedCharacterId = characterId
-                                        selectedModel = data.characters[characterId]
-                                            ?.let { DataRepository(context).availableModels(it).firstOrNull() }
+                                        val model = data.characters[characterId]
+                                            ?.let { DataRepository(appContext).availableModels(it).firstOrNull() }
+                                        selectCharacterModel(characterId, model)
                                     }
                                 },
                                 onCharacterSelected = { character ->
-                                    selectedCharacterId = character.id
-                                    selectedModel = DataRepository(context).availableModels(character).firstOrNull()
+                                    selectCharacterModel(
+                                        character.id,
+                                        DataRepository(appContext).availableModels(character).firstOrNull(),
+                                    )
                                 },
-                                onModelSelected = { selectedModel = it },
+                                onModelSelected = { selectCharacterModel(it.characterId, it) },
                                 onModelAssetsChanged = { modelAssetsVersion += 1 },
                             )
                             Screen.Settings -> SettingsScreen(
