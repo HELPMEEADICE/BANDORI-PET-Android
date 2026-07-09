@@ -38,7 +38,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.ViewInAr
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -199,7 +202,7 @@ private fun BandoriPetApp() {
                                     selectedScreen = screen
                                     live2DFullScreen = false
                                 },
-                                icon = { NavIcon(screen, selectedScreen == screen) },
+                                icon = { NavIcon(screen) },
                                 label = { Text(screen.title, fontWeight = FontWeight.Bold) },
                             )
                         }
@@ -1041,47 +1044,15 @@ private fun EmptyMessage(title: String, body: String) {
 }
 
 @Composable
-private fun NavIcon(screen: Screen, selected: Boolean) {
-    Surface(
-        modifier = Modifier.size(28.dp),
-        shape = RoundedCornerShape(999.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-    ) {
-        val iconColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(6.dp),
-        ) {
-            when (screen) {
-                Screen.Live2D -> {
-                    drawCircle(iconColor, radius = size.minDimension * 0.26f, center = Offset(size.width * 0.5f, size.height * 0.32f))
-                    drawRoundRect(
-                        color = iconColor,
-                        topLeft = Offset(size.width * 0.18f, size.height * 0.58f),
-                        size = Size(size.width * 0.64f, size.height * 0.34f),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.width * 0.18f, size.height * 0.18f),
-                    )
-                }
-                Screen.Model -> {
-                    val stroke = Stroke(width = 2.4.dp.toPx())
-                    drawRoundRect(iconColor, size = size, cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()), style = stroke)
-                    drawCircle(iconColor, radius = size.minDimension * 0.16f, center = Offset(size.width * 0.5f, size.height * 0.48f))
-                    drawLine(iconColor, Offset(size.width * 0.5f, 0f), Offset(size.width * 0.5f, size.height * 0.2f), strokeWidth = 2.2.dp.toPx())
-                    drawLine(iconColor, Offset(size.width * 0.5f, size.height * 0.8f), Offset(size.width * 0.5f, size.height), strokeWidth = 2.2.dp.toPx())
-                }
-                Screen.Settings -> {
-                    val stroke = Stroke(width = 2.2.dp.toPx())
-                    drawCircle(iconColor, radius = size.minDimension * 0.34f, style = stroke)
-                    drawCircle(iconColor, radius = size.minDimension * 0.11f)
-                    drawLine(iconColor, Offset(size.width * 0.5f, 0f), Offset(size.width * 0.5f, size.height * 0.2f), strokeWidth = 2.2.dp.toPx())
-                    drawLine(iconColor, Offset(size.width * 0.5f, size.height * 0.8f), Offset(size.width * 0.5f, size.height), strokeWidth = 2.2.dp.toPx())
-                    drawLine(iconColor, Offset(0f, size.height * 0.5f), Offset(size.width * 0.2f, size.height * 0.5f), strokeWidth = 2.2.dp.toPx())
-                    drawLine(iconColor, Offset(size.width * 0.8f, size.height * 0.5f), Offset(size.width, size.height * 0.5f), strokeWidth = 2.2.dp.toPx())
-                }
-            }
-        }
-    }
+private fun NavIcon(screen: Screen) {
+    Icon(
+        imageVector = when (screen) {
+            Screen.Live2D -> Icons.Outlined.Face
+            Screen.Model -> Icons.Outlined.ViewInAr
+            Screen.Settings -> Icons.Outlined.Settings
+        },
+        contentDescription = screen.title,
+    )
 }
 
 private val ModelChoice.isMoc3: Boolean
