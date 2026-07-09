@@ -1,9 +1,12 @@
 package com.bandori.pet
 
 import android.os.Bundle
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,6 +73,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
     val appContext = context.applicationContext
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
     var transform by remember { mutableStateOf(loadWallpaperTransform(appContext)) }
+    val backgroundUri = remember { RenderSettings.load(appContext).backgroundUri }
     var status by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -86,6 +92,11 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 ),
             ),
     ) {
+        ContentUriImage(
+            uri = backgroundUri,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
         if (selectedModel == null) {
             ElevatedCard(
                 modifier = Modifier
@@ -190,5 +201,22 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale) {
+    val context = LocalContext.current
+    val bitmap = remember(uri) {
+        uri?.let {
+            runCatching {
+                context.contentResolver.openInputStream(Uri.parse(it))?.use { input ->
+                    BitmapFactory.decodeStream(input)?.asImageBitmap()
+                }
+            }.getOrNull()
+        }
+    }
+    if (bitmap != null) {
+        Image(bitmap = bitmap, contentDescription = null, modifier = modifier, contentScale = contentScale)
     }
 }

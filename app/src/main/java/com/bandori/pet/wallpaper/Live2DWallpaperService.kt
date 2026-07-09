@@ -111,9 +111,11 @@ class Live2DWallpaperService : WallpaperService() {
                                 settings.fpsLimit,
                                 settings.vsyncEnabled,
                             )
+                            NativeLive2D.setBackground(applicationContext, handle, settings.backgroundUri)
                             applyWallpaperTransform()
                         } else {
                             NativeLive2D.setRenderOptions(handle, settings.fpsLimit, settings.vsyncEnabled)
+                            NativeLive2D.setBackground(applicationContext, handle, settings.backgroundUri)
                         }
                         if (handle != 0L) {
                             NativeLive2D.loadModel(

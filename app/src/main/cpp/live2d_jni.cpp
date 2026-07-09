@@ -1,4 +1,5 @@
 #include <EGL/egl.h>
+#include <GLES2/gl2.h>
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
@@ -9,11 +10,13 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #ifndef EGL_OPENGL_ES_API
 #define EGL_OPENGL_ES_API 0x30A0
@@ -83,6 +86,10 @@ struct Renderer {
     std::string runtimeRoot;
     std::string pendingModel;
     std::unordered_map<std::string, std::string> pendingResources;
+    bool pendingBackground = false;
+    int pendingBackgroundWidth = 0;
+    int pendingBackgroundHeight = 0;
+    std::vector<uint32_t> pendingBackgroundPixels;
     std::unordered_map<std::string, std::string> resources;
     std::string lastError;
     std::mutex mutex;
@@ -99,6 +106,15 @@ struct Renderer {
     std::atomic<float> transformOffsetX{0.0f};
     std::atomic<float> transformOffsetY{0.0f};
     std::atomic<float> transformScale{1.0f};
+    GLuint backgroundTexture = 0;
+    GLuint backgroundProgram = 0;
+    GLuint backgroundBuffer = 0;
+    GLint backgroundPositionAttrib = -1;
+    GLint backgroundTexCoordAttrib = -1;
+    GLint backgroundSamplerUniform = -1;
+    int backgroundWidth = 0;
+    int backgroundHeight = 0;
+    bool backgroundEnabled = false;
 };
 
 static int positiveSize(int value) {
@@ -282,6 +298,192 @@ static bool initEgl(Renderer* renderer) {
     }
     eglSwapInterval(renderer->display, renderer->vsyncEnabled.load() ? 1 : 0);
     return true;
+}
+
+static GLuint compileBackgroundShader(Renderer* renderer, GLenum type, const char* source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+        char log[512] = {0};
+        glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
+        setError(renderer, std::string("背景 shader 编译失败: ") + log);
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+static bool ensureBackgroundProgram(Renderer* renderer) {
+    if (renderer->backgroundProgram != 0) return true;
+
+    static const char* vertexSource = R"glsl(
+attribute vec2 aPosition;
+attribute vec2 aTexCoord;
+varying vec2 vTexCoord;
+void main() {
+    vTexCoord = aTexCoord;
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+}
+)glsl";
+    static const char* fragmentSource = R"glsl(
+precision mediump float;
+uniform sampler2D uTexture;
+varying vec2 vTexCoord;
+void main() {
+    gl_FragColor = texture2D(uTexture, vTexCoord);
+}
+)glsl";
+
+    GLuint vertexShader = compileBackgroundShader(renderer, GL_VERTEX_SHADER, vertexSource);
+    if (vertexShader == 0) return false;
+    GLuint fragmentShader = compileBackgroundShader(renderer, GL_FRAGMENT_SHADER, fragmentSource);
+    if (fragmentShader == 0) {
+        glDeleteShader(vertexShader);
+        return false;
+    }
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        char log[512] = {0};
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        setError(renderer, std::string("背景 shader 链接失败: ") + log);
+        glDeleteProgram(program);
+        return false;
+    }
+
+    renderer->backgroundProgram = program;
+    renderer->backgroundPositionAttrib = glGetAttribLocation(program, "aPosition");
+    renderer->backgroundTexCoordAttrib = glGetAttribLocation(program, "aTexCoord");
+    renderer->backgroundSamplerUniform = glGetUniformLocation(program, "uTexture");
+    glGenBuffers(1, &renderer->backgroundBuffer);
+    return renderer->backgroundPositionAttrib >= 0
+        && renderer->backgroundTexCoordAttrib >= 0
+        && renderer->backgroundSamplerUniform >= 0
+        && renderer->backgroundBuffer != 0;
+}
+
+static void destroyBackgroundResources(Renderer* renderer) {
+    if (renderer->backgroundTexture != 0) {
+        glDeleteTextures(1, &renderer->backgroundTexture);
+        renderer->backgroundTexture = 0;
+    }
+    if (renderer->backgroundBuffer != 0) {
+        glDeleteBuffers(1, &renderer->backgroundBuffer);
+        renderer->backgroundBuffer = 0;
+    }
+    if (renderer->backgroundProgram != 0) {
+        glDeleteProgram(renderer->backgroundProgram);
+        renderer->backgroundProgram = 0;
+    }
+    renderer->backgroundEnabled = false;
+    renderer->backgroundWidth = 0;
+    renderer->backgroundHeight = 0;
+}
+
+static void uploadBackground(Renderer* renderer, const std::vector<uint32_t>& pixels, int width, int height) {
+    if (pixels.empty() || width <= 0 || height <= 0) {
+        if (renderer->backgroundTexture != 0) {
+            glDeleteTextures(1, &renderer->backgroundTexture);
+            renderer->backgroundTexture = 0;
+        }
+        renderer->backgroundEnabled = false;
+        renderer->backgroundWidth = 0;
+        renderer->backgroundHeight = 0;
+        return;
+    }
+
+    if (renderer->backgroundTexture == 0) glGenTextures(1, &renderer->backgroundTexture);
+    if (renderer->backgroundTexture == 0) return;
+
+    std::vector<unsigned char> rgba(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
+    for (size_t i = 0; i < pixels.size(); ++i) {
+        const uint32_t argb = pixels[i];
+        rgba[i * 4] = static_cast<unsigned char>((argb >> 16) & 0xFF);
+        rgba[i * 4 + 1] = static_cast<unsigned char>((argb >> 8) & 0xFF);
+        rgba[i * 4 + 2] = static_cast<unsigned char>(argb & 0xFF);
+        rgba[i * 4 + 3] = static_cast<unsigned char>((argb >> 24) & 0xFF);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, renderer->backgroundTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        width,
+        height,
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        rgba.data()
+    );
+    glBindTexture(GL_TEXTURE_2D, 0);
+    renderer->backgroundEnabled = true;
+    renderer->backgroundWidth = width;
+    renderer->backgroundHeight = height;
+}
+
+static void drawBackground(Renderer* renderer) {
+    if (!renderer->backgroundEnabled || renderer->backgroundTexture == 0) return;
+    if (!ensureBackgroundProgram(renderer)) return;
+
+    const float surfaceAspect = static_cast<float>(renderer->width.load()) / static_cast<float>(positiveSize(renderer->height.load()));
+    const float imageAspect = static_cast<float>(positiveSize(renderer->backgroundWidth)) / static_cast<float>(positiveSize(renderer->backgroundHeight));
+    float u0 = 0.0f;
+    float u1 = 1.0f;
+    float v0 = 0.0f;
+    float v1 = 1.0f;
+    if (imageAspect > surfaceAspect) {
+        const float visibleWidth = surfaceAspect / imageAspect;
+        const float inset = (1.0f - visibleWidth) * 0.5f;
+        u0 = inset;
+        u1 = 1.0f - inset;
+    } else if (imageAspect < surfaceAspect) {
+        const float visibleHeight = imageAspect / surfaceAspect;
+        const float inset = (1.0f - visibleHeight) * 0.5f;
+        v0 = inset;
+        v1 = 1.0f - inset;
+    }
+
+    const GLfloat vertices[] = {
+        -1.0f, -1.0f, u0, v1,
+         1.0f, -1.0f, u1, v1,
+        -1.0f,  1.0f, u0, v0,
+         1.0f,  1.0f, u1, v0,
+    };
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glUseProgram(renderer->backgroundProgram);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, renderer->backgroundTexture);
+    glUniform1i(renderer->backgroundSamplerUniform, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, renderer->backgroundBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+    glEnableVertexAttribArray(renderer->backgroundPositionAttrib);
+    glEnableVertexAttribArray(renderer->backgroundTexCoordAttrib);
+    glVertexAttribPointer(renderer->backgroundPositionAttrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<void*>(0));
+    glVertexAttribPointer(renderer->backgroundTexCoordAttrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<void*>(2 * sizeof(GLfloat)));
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDisableVertexAttribArray(renderer->backgroundPositionAttrib);
+    glDisableVertexAttribArray(renderer->backgroundTexCoordAttrib);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 static bool initLua(Renderer* renderer) {
@@ -724,10 +926,16 @@ function __bp_transform(x, y, s)
     if renderer.set_scale then renderer:set_scale(scale) end
 end
 
+function __bp_clear()
+    gl.glViewport(0, 0, width, height)
+    gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+    gl.glClear(0x4000)
+end
+
 function __bp_draw(time_msec)
     if not renderer then return end
     gl.glViewport(0, 0, width, height)
-    renderer:draw({ r = 0.0, g = 0.0, b = 0.0, a = 0.0, time_msec = time_msec })
+    renderer:draw({ clear = false, time_msec = time_msec })
     if active_motion_kind == "action" and is_motion_finished() then
         start_default_motion()
     end
@@ -743,6 +951,10 @@ static void renderLoop(Renderer* renderer) {
         const auto frameStart = std::chrono::steady_clock::now();
         std::string model;
         std::unordered_map<std::string, std::string> resources;
+        std::vector<uint32_t> backgroundPixels;
+        int backgroundWidth = 0;
+        int backgroundHeight = 0;
+        bool shouldUpdateBackground = false;
         bool shouldTouch = renderer->pendingTouch.exchange(false);
         float touchXRatio = renderer->touchXRatio.load();
         float touchYRatio = renderer->touchYRatio.load();
@@ -755,10 +967,22 @@ static void renderLoop(Renderer* renderer) {
             std::lock_guard<std::mutex> lock(renderer->mutex);
             model.swap(renderer->pendingModel);
             resources.swap(renderer->pendingResources);
+            if (renderer->pendingBackground) {
+                shouldUpdateBackground = true;
+                backgroundWidth = renderer->pendingBackgroundWidth;
+                backgroundHeight = renderer->pendingBackgroundHeight;
+                backgroundPixels.swap(renderer->pendingBackgroundPixels);
+                renderer->pendingBackground = false;
+                renderer->pendingBackgroundWidth = 0;
+                renderer->pendingBackgroundHeight = 0;
+            }
         }
 
         if (shouldUpdateRenderOptions) {
             eglSwapInterval(renderer->display, renderer->vsyncEnabled.load() ? 1 : 0);
+        }
+        if (shouldUpdateBackground) {
+            uploadBackground(renderer, backgroundPixels, backgroundWidth, backgroundHeight);
         }
         if (shouldResize) {
             getGlobal(renderer, "__bp_resize");
@@ -788,6 +1012,9 @@ static void renderLoop(Renderer* renderer) {
             callLua(renderer, "__bp_transform", 3);
         }
 
+        getGlobal(renderer, "__bp_clear");
+        callLua(renderer, "__bp_clear", 0);
+        drawBackground(renderer);
         getGlobal(renderer, "__bp_draw");
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
         const auto timeMs = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
@@ -801,6 +1028,8 @@ static void renderLoop(Renderer* renderer) {
             std::this_thread::sleep_until(frameStart + frameDuration);
         }
     }
+
+    destroyBackgroundResources(renderer);
 }
 
 static void cleanup(Renderer* renderer) {
@@ -912,6 +1141,41 @@ Java_com_bandori_pet_live2d_NativeLive2D_setTransform(JNIEnv*, jobject, jlong ha
     renderer->transformOffsetY.store(offsetY);
     renderer->transformScale.store(scale);
     renderer->pendingTransform.store(true);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_setBackgroundPixels(
+    JNIEnv* env,
+    jobject,
+    jlong handle,
+    jintArray pixels,
+    jint width,
+    jint height
+) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+
+    std::vector<uint32_t> pixelData;
+    int backgroundWidth = width;
+    int backgroundHeight = height;
+    if (pixels != nullptr && width > 0 && height > 0 && width <= 4096 && height <= 4096) {
+        const jsize pixelCount = env->GetArrayLength(pixels);
+        const int requiredCount = width * height;
+        if (pixelCount >= requiredCount) {
+            pixelData.resize(static_cast<size_t>(requiredCount));
+            env->GetIntArrayRegion(pixels, 0, requiredCount, reinterpret_cast<jint*>(pixelData.data()));
+        }
+    }
+    if (pixelData.empty()) {
+        backgroundWidth = 0;
+        backgroundHeight = 0;
+    }
+
+    std::lock_guard<std::mutex> lock(renderer->mutex);
+    renderer->pendingBackgroundPixels = std::move(pixelData);
+    renderer->pendingBackgroundWidth = backgroundWidth;
+    renderer->pendingBackgroundHeight = backgroundHeight;
+    renderer->pendingBackground = true;
 }
 
 extern "C" JNIEXPORT void JNICALL
