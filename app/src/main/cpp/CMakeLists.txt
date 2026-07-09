@@ -14,3 +14,5 @@ target_link_libraries(
     ${egl-lib}
     ${log-lib}
 )
+
+target_link_options(bandoripet PRIVATE -Wl,-z,max-page-size=0x4000)
