@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.compose.ExperimentalActivityComposeApi
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -209,7 +208,6 @@ private data class ModelTransferState(
     val progress: ZstModelArchive.DownloadProgress? = null,
 )
 
-@OptIn(ExperimentalActivityComposeApi::class)
 @Composable
 private fun BandoriPetApp() {
     val context = LocalContext.current
