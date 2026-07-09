@@ -17,7 +17,12 @@ object ZstModelArchive {
     private const val INDEX_MEMBER = ".bandori_zst_index.json"
     private const val LOGICAL_MODELS_ROOT = "models/"
     private const val VIRTUAL_ROOT = "archive://"
-    private val indexCache = mutableMapOf<String, Set<String>>()
+    private const val INDEX_CACHE_MAX_ENTRIES = 8
+    private val indexCache = object : LinkedHashMap<String, Set<String>>(INDEX_CACHE_MAX_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Set<String>>?): Boolean {
+            return size > INDEX_CACHE_MAX_ENTRIES
+        }
+    }
 
     fun assetExists(context: Context, logicalPath: String): Boolean = resolve(context, logicalPath) != null
 

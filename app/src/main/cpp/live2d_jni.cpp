@@ -328,7 +328,8 @@ precision mediump float;
 uniform sampler2D uTexture;
 varying vec2 vTexCoord;
 void main() {
-    gl_FragColor = texture2D(uTexture, vTexCoord);
+    vec4 color = texture2D(uTexture, vTexCoord);
+    gl_FragColor = color.bgra;
 }
 )glsl";
 
@@ -362,6 +363,16 @@ void main() {
     renderer->backgroundTexCoordAttrib = glGetAttribLocation(program, "aTexCoord");
     renderer->backgroundSamplerUniform = glGetUniformLocation(program, "uTexture");
     glGenBuffers(1, &renderer->backgroundBuffer);
+
+    const GLfloat vertices[] = {
+        -1.0f, -1.0f, 0.0f, 1.0f,
+         1.0f, -1.0f, 1.0f, 1.0f,
+        -1.0f,  1.0f, 0.0f, 0.0f,
+         1.0f,  1.0f, 1.0f, 0.0f,
+    };
+    glBindBuffer(GL_ARRAY_BUFFER, renderer->backgroundBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     return renderer->backgroundPositionAttrib >= 0
         && renderer->backgroundTexCoordAttrib >= 0
         && renderer->backgroundSamplerUniform >= 0
@@ -401,15 +412,6 @@ static void uploadBackground(Renderer* renderer, const std::vector<uint32_t>& pi
     if (renderer->backgroundTexture == 0) glGenTextures(1, &renderer->backgroundTexture);
     if (renderer->backgroundTexture == 0) return;
 
-    std::vector<unsigned char> rgba(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
-    for (size_t i = 0; i < pixels.size(); ++i) {
-        const uint32_t argb = pixels[i];
-        rgba[i * 4] = static_cast<unsigned char>((argb >> 16) & 0xFF);
-        rgba[i * 4 + 1] = static_cast<unsigned char>((argb >> 8) & 0xFF);
-        rgba[i * 4 + 2] = static_cast<unsigned char>(argb & 0xFF);
-        rgba[i * 4 + 3] = static_cast<unsigned char>((argb >> 24) & 0xFF);
-    }
-
     glBindTexture(GL_TEXTURE_2D, renderer->backgroundTexture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -424,7 +426,7 @@ static void uploadBackground(Renderer* renderer, const std::vector<uint32_t>& pi
         0,
         GL_RGBA,
         GL_UNSIGNED_BYTE,
-        rgba.data()
+        pixels.data()
     );
     glBindTexture(GL_TEXTURE_2D, 0);
     renderer->backgroundEnabled = true;
@@ -469,7 +471,7 @@ static void drawBackground(Renderer* renderer) {
     glBindTexture(GL_TEXTURE_2D, renderer->backgroundTexture);
     glUniform1i(renderer->backgroundSamplerUniform, 0);
     glBindBuffer(GL_ARRAY_BUFFER, renderer->backgroundBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(renderer->backgroundPositionAttrib);
     glEnableVertexAttribArray(renderer->backgroundTexCoordAttrib);
     glVertexAttribPointer(renderer->backgroundPositionAttrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<void*>(0));

@@ -17,4 +17,5 @@ target_link_libraries(
     ${log-lib}
 )
 
-target_link_options(bandoripet PRIVATE -Wl,-z,max-page-size=0x4000)
+target_compile_options(bandoripet PRIVATE $<$<CONFIG:Release>:-O3 -flto -DNDEBUG>)
+target_link_options(bandoripet PRIVATE -Wl,-z,max-page-size=0x4000 $<$<CONFIG:Release>:-flto -Wl,--gc-sections -Wl,-s>)

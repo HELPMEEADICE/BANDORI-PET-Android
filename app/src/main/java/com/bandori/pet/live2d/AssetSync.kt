@@ -52,9 +52,11 @@ object AssetSync {
     private fun copyTree(context: Context, assetPath: String, target: File) {
         val children = context.assets.list(assetPath).orEmpty()
         if (children.isEmpty()) {
-            target.parentFile?.mkdirs()
-            context.assets.open(assetPath).use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
+            if (!target.exists()) {
+                target.parentFile?.mkdirs()
+                context.assets.open(assetPath).use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
             }
             return
         }

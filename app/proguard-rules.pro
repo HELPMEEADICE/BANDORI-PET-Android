@@ -1,0 +1,3 @@
+-keep class com.bandori.pet.live2d.NativeLive2D { *; }
+-keep class com.bandori.pet.floating.FloatingLive2DOverlayService { *; }
+-keep class com.bandori.pet.wallpaper.Live2DWallpaperService { *; }

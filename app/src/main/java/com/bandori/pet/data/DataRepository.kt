@@ -5,7 +5,11 @@ import com.bandori.pet.I18n
 import org.json.JSONObject
 
 class DataRepository(private val context: Context) {
-    fun load(): AppData {
+    private val cachedAppData: AppData by lazy { loadInternal() }
+
+    fun load(): AppData = cachedAppData
+
+    private fun loadInternal(): AppData {
         val bandsJson = JSONObject(readAssetText("band.json"))
         val bands = mutableListOf<Band>()
         bandsJson.getJSONArray("bands").let { array ->

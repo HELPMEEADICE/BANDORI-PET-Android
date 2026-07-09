@@ -42,6 +42,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.live2d.Live2DTransform
+import com.bandori.pet.ui.live2d.ContentUriImage
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -120,7 +121,8 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                         statusChanged = { status = it }
                         transformChanged = { transform = it }
                         setInteractionLocked(false)
-                        setRenderOptions(RenderSettings.load(appContext).fpsLimit, RenderSettings.load(appContext).vsyncEnabled)
+                        val renderSettings = RenderSettings.load(appContext)
+                        setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
                         setTransform(transform)
                         setModel(selectedModel)
                     }
