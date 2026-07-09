@@ -15,17 +15,23 @@ object AssetSync {
         copyRuntimeIfNeeded(context, runtimeRoot)
 
         val archive = ZstModelArchive.readModelPrefix(context, modelAssetPath)
-        if (archive == null) {
+        if (archive != null) {
+            PreparedModel(
+                runtimeRoot = runtimeRoot.absolutePath,
+                modelPath = archive.modelPath,
+                resourcePaths = archive.resources.keys.toList(),
+                resourceBytes = archive.resources.values.toList(),
+            )
+        } else {
             val modelDir = modelAssetPath.substringBeforeLast('/')
-            copyTree(context, modelDir, File(root, modelDir))
+            val resourceMap = readAssetDirFiles(context, modelDir, File(root, modelDir))
+            PreparedModel(
+                runtimeRoot = runtimeRoot.absolutePath,
+                modelPath = File(root, modelAssetPath).absolutePath,
+                resourcePaths = resourceMap.keys.toList(),
+                resourceBytes = resourceMap.values.toList(),
+            )
         }
-
-        PreparedModel(
-            runtimeRoot = runtimeRoot.absolutePath,
-            modelPath = archive?.modelPath ?: File(root, modelAssetPath).absolutePath,
-            resourcePaths = archive?.resources?.keys?.toList().orEmpty(),
-            resourceBytes = archive?.resources?.values?.toList().orEmpty(),
-        )
     }
 
     private fun copyRuntimeIfNeeded(context: Context, runtimeRoot: File) {
@@ -64,6 +70,26 @@ object AssetSync {
         target.mkdirs()
         for (child in children) {
             copyTree(context, "$assetPath/$child", File(target, child))
+        }
+    }
+
+    private fun readAssetDirFiles(context: Context, assetDir: String, targetDir: File): Map<String, ByteArray> {
+        val result = mutableMapOf<String, ByteArray>()
+        collectAssetFiles(context, assetDir, targetDir, result)
+        return result
+    }
+
+    private fun collectAssetFiles(context: Context, assetPath: String, targetFile: File, result: MutableMap<String, ByteArray>) {
+        val entries = context.assets.list(assetPath)
+        if (entries == null) {
+            runCatching {
+                result[targetFile.absolutePath] = context.assets.open(assetPath).use { it.readBytes() }
+            }
+            return
+        }
+        if (entries.isEmpty()) return
+        for (entry in entries) {
+            collectAssetFiles(context, "$assetPath/$entry", File(targetFile, entry), result)
         }
     }
 }

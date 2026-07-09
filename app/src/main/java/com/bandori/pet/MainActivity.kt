@@ -230,7 +230,10 @@ fun BandoriPetApp(
                                     )
                                 },
                                 onModelSelected = { selectCharacterModel(it.characterId, it) },
-                                onModelAssetsChanged = { modelAssetsVersion += 1 },
+                                onModelAssetsChanged = {
+                                    modelAssetsVersion += 1
+                                    DataRepository.invalidateCache()
+                                },
                             )
                             Screen.Settings -> SettingsScreen(
                                 selectedModel = selectedModel,

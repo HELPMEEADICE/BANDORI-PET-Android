@@ -5,9 +5,22 @@ import com.bandori.pet.I18n
 import org.json.JSONObject
 
 class DataRepository(private val context: Context) {
-    private val cachedAppData: AppData by lazy { loadInternal() }
+    companion object {
+        @Volatile
+        private var cachedAppData: AppData? = null
 
-    fun load(): AppData = cachedAppData
+        fun invalidateCache() {
+            cachedAppData = null
+        }
+    }
+
+    @Synchronized
+    fun load(): AppData {
+        cachedAppData?.let { return it }
+        val data = loadInternal()
+        cachedAppData = data
+        return data
+    }
 
     private fun loadInternal(): AppData {
         val bandsJson = JSONObject(readAssetText("band.json"))
