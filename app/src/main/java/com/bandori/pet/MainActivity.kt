@@ -155,7 +155,7 @@ private fun BandoriPetApp() {
     var appData by remember { mutableStateOf<AppData?>(null) }
     var selectedScreen by remember { mutableStateOf(Screen.Live2D) }
     var selectedBandId by remember { mutableStateOf<String?>(null) }
-    var selectedCharacterId by remember { mutableStateOf("tomorin") }
+    var selectedCharacterId by remember { mutableStateOf("kasumi") }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
     var live2DFullScreen by remember { mutableStateOf(false) }
     var modelAssetsVersion by remember { mutableStateOf(0) }
