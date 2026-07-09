@@ -593,6 +593,7 @@ private fun ModelScreen(
                         imagePath = band.logo,
                         selected = band.id == selectedBand.id,
                         aspectRatio = 1.8f,
+                        imageContentScale = ContentScale.Fit,
                         onClick = { onBandSelected(band) },
                     )
                 }
@@ -913,6 +914,7 @@ private fun ImageCard(
     imageReloadKey: Int = 0,
     selected: Boolean,
     aspectRatio: Float,
+    imageContentScale: ContentScale = ContentScale.Crop,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -942,7 +944,7 @@ private fun ImageCard(
                 path = imagePath,
                 reloadKey = imageReloadKey,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
+                contentScale = imageContentScale,
                 placeholderText = title,
             )
             Box(
