@@ -9,7 +9,7 @@
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/BANDORI-PET-Android?color=orange"></a>
   <a href="https://kotlinlang.org/"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0+-7F52FF?logo=kotlin&logoColor=white"></a>
   <a href="https://luajit.org/"><img alt="LuaJIT" src="https://img.shields.io/badge/LuaJIT-2.1+-000080?logo=lua&logoColor=white"></a>
-  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism-EE82EE?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M2MtMy45NS0uNDktNy0zLjg1LTctNy45M3MzLjA1LTcuNDQgNy03LjkzdjE1Ljg2em0yLTE1Ljg2YzMuOTUuNDkgNyAzLjg1IDcgNy45M3MtMy4wNSA3LjQ0LTcgNy45M1Y0LjA3eiIvPjwvc3ZnPg=="></a>
+  <a href="https://github.com/EasyLive2D/Live2D-v2-Lua"><img alt="Live2D Runtime" src="https://img.shields.io/badge/Live2D-EasyLive2D_v2_Lua-EE82EE?logo=lua&logoColor=white"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/BANDORI-PET-Android?color=green"></a>
 </p>
 
@@ -140,7 +140,9 @@ app/src/main/jniLibs/arm64-v8a/
 
 ### Live2D Lua 运行时 (`third_party/Live2D-v2-Lua/`)
 
-这是 Live2D 的 Lua 绑定层，负责真正的模型解析和 OpenGL 绘制。需要放到项目根目录下的 `third_party/Live2D-v2-Lua/`。
+> **注意**：本项目**未使用 Live2D 官方 Cubism Core SDK**，而是基于社区维护的 [EasyLive2D/Live2D-v2-Lua](https://github.com/EasyLive2D/Live2D-v2-Lua) 开源 Lua 运行时。这是一个纯 Lua 实现的 Live2D 解析与渲染引擎，支持 MOC2 / MOC3 模型格式，无需依赖官方原生库。
+
+该运行时负责模型解析和 OpenGL 绘制，需要放到项目根目录下的 `third_party/Live2D-v2-Lua/`。
 
 Gradle sync 任务会自动将其复制到 APK assets 中（排除 `.git`、`venv`、`*.md`、`*.png`、测试文件等）。
 
@@ -225,7 +227,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## 致谢
 
-- [Live2D Cubism SDK](https://www.live2d.com/) —— 赋予角色灵魂的 Live2D 技术
+- [EasyLive2D/Live2D-v2-Lua](https://github.com/EasyLive2D/Live2D-v2-Lua) —— 社区 Live2D Lua 运行时（非官方 Core）
+- [Live2D Cubism](https://www.live2d.com/) —— 赋予角色灵魂的 Live2D 技术
 - [LuaJIT](https://luajit.org/) —— 极速 Lua 运行时
 - [BanG Dream!](https://bang-dream.com/) —— 闪闪发光心动不已！
 - 所有为 Bandori Live2D 模型整理做出贡献的社区成员
