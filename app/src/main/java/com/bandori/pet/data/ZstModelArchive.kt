@@ -68,6 +68,15 @@ object ZstModelArchive {
         return target
     }
 
+    fun hasDownloadedCharacter(context: Context, characterId: String): Boolean =
+        downloadedArchiveFile(context, characterId).isFile
+
+    fun deleteDownloadedCharacter(context: Context, characterId: String): Boolean {
+        val deleted = downloadedArchiveFile(context, characterId).delete()
+        if (deleted) synchronized(indexCache) { indexCache.remove(archiveAssetPath(characterId)) }
+        return deleted
+    }
+
     fun listCostumes(context: Context, characterId: String): List<String> {
         val archiveAssetPath = archiveAssetPath(characterId)
         return runCatching {

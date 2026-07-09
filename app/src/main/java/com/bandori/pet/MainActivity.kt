@@ -11,10 +11,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +36,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,6 +50,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -531,6 +535,7 @@ private fun ModelScreen(
     }
     var downloadingModel by remember(selectedCharacter?.id) { mutableStateOf(false) }
     var downloadMessage by remember(selectedCharacter?.id) { mutableStateOf<String?>(null) }
+    var characterDeleteTarget by remember { mutableStateOf<CharacterInfo?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -585,6 +590,7 @@ private fun ModelScreen(
                         selected = character.id == selectedCharacterId,
                         aspectRatio = 0.82f,
                         onClick = { onCharacterSelected(character) },
+                        onLongClick = { characterDeleteTarget = character },
                     )
                 }
             }
@@ -645,6 +651,66 @@ private fun ModelScreen(
                 }
             }
         }
+    }
+
+    characterDeleteTarget?.let { character ->
+        val hasDownloadedModel = ZstModelArchive.hasDownloadedCharacter(context.applicationContext, character.id)
+        AlertDialog(
+            onDismissRequest = { characterDeleteTarget = null },
+            title = { Text("管理角色模型") },
+            text = {
+                Text(
+                    if (hasDownloadedModel) {
+                        "可以重新下载 ${character.display} 的 .zst 模型，或删除已下载模型。"
+                    } else {
+                        "可以重新下载 ${character.display} 的 .zst 模型。当前没有可删除的已下载模型，内置模型无法删除。"
+                    },
+                )
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(
+                        onClick = {
+                            characterDeleteTarget = null
+                            scope.launch {
+                                val result = runCatching {
+                                    withContext(Dispatchers.IO) {
+                                        ZstModelArchive.downloadCharacter(context.applicationContext, character.id)
+                                    }
+                                }
+                                result.onSuccess {
+                                    if (selectedCharacterId == character.id) downloadMessage = "更新完成，正在载入..."
+                                    onModelAssetsChanged()
+                                }.onFailure { error ->
+                                    if (selectedCharacterId == character.id) downloadMessage = error.localizedMessage ?: "更新失败"
+                                }
+                            }
+                        },
+                    ) {
+                        Text("更新模型")
+                    }
+                    TextButton(
+                        enabled = hasDownloadedModel,
+                        onClick = {
+                            characterDeleteTarget = null
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    ZstModelArchive.deleteDownloadedCharacter(context.applicationContext, character.id)
+                                }
+                                onModelAssetsChanged()
+                            }
+                        },
+                    ) {
+                        Text("删除")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { characterDeleteTarget = null }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 }
 
@@ -808,6 +874,7 @@ private fun SelectionWindow(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ImageCard(
     modifier: Modifier = Modifier,
     title: String,
@@ -817,6 +884,7 @@ private fun ImageCard(
     selected: Boolean,
     aspectRatio: Float,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(22.dp)
     Card(
@@ -824,7 +892,7 @@ private fun ImageCard(
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
             .clip(shape)
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = shape,
         border = if (selected) {
             BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
