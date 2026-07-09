@@ -99,6 +99,9 @@ struct Renderer {
     std::atomic<bool> pendingTouch{false};
     std::atomic<float> touchXRatio{0.5f};
     std::atomic<float> touchYRatio{0.5f};
+    std::atomic<bool> pendingLookAt{false};
+    std::atomic<float> lookAtXRatio{0.5f};
+    std::atomic<float> lookAtYRatio{0.5f};
     std::atomic<bool> pendingTransform{false};
     std::atomic<bool> pendingRenderOptions{false};
     std::atomic<int> fpsLimit{60};
@@ -917,6 +920,13 @@ function __bp_touch(x_ratio, y_ratio)
     end
 end
 
+function __bp_look_at(x_ratio, y_ratio)
+    if not renderer or renderer.drag == nil then return end
+    x_ratio = clamp01(x_ratio)
+    y_ratio = clamp01(y_ratio)
+    renderer:drag(x_ratio * width, y_ratio * height)
+end
+
 function __bp_transform(x, y, s)
     offset_x = tonumber(x) or 0
     offset_y = tonumber(y) or 0
@@ -958,6 +968,9 @@ static void renderLoop(Renderer* renderer) {
         bool shouldTouch = renderer->pendingTouch.exchange(false);
         float touchXRatio = renderer->touchXRatio.load();
         float touchYRatio = renderer->touchYRatio.load();
+        bool shouldLookAt = renderer->pendingLookAt.exchange(false);
+        float lookAtXRatio = renderer->lookAtXRatio.load();
+        float lookAtYRatio = renderer->lookAtYRatio.load();
         bool shouldResize = renderer->pendingResize.exchange(false);
         bool shouldTransform = renderer->pendingTransform.exchange(false);
         bool shouldUpdateRenderOptions = renderer->pendingRenderOptions.exchange(false);
@@ -1003,6 +1016,12 @@ static void renderLoop(Renderer* renderer) {
             renderer->luaApi.pushNumber(renderer->lua, touchXRatio);
             renderer->luaApi.pushNumber(renderer->lua, touchYRatio);
             callLua(renderer, "__bp_touch", 2);
+        }
+        if (shouldLookAt) {
+            getGlobal(renderer, "__bp_look_at");
+            renderer->luaApi.pushNumber(renderer->lua, lookAtXRatio);
+            renderer->luaApi.pushNumber(renderer->lua, lookAtYRatio);
+            callLua(renderer, "__bp_look_at", 2);
         }
         if (shouldTransform) {
             getGlobal(renderer, "__bp_transform");
@@ -1185,6 +1204,15 @@ Java_com_bandori_pet_live2d_NativeLive2D_touch(JNIEnv*, jobject, jlong handle, j
     renderer->touchXRatio.store(std::clamp(static_cast<float>(xRatio), 0.0f, 1.0f));
     renderer->touchYRatio.store(std::clamp(static_cast<float>(yRatio), 0.0f, 1.0f));
     renderer->pendingTouch.store(true);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_lookAt(JNIEnv*, jobject, jlong handle, jfloat xRatio, jfloat yRatio) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+    renderer->lookAtXRatio.store(std::clamp(static_cast<float>(xRatio), 0.0f, 1.0f));
+    renderer->lookAtYRatio.store(std::clamp(static_cast<float>(yRatio), 0.0f, 1.0f));
+    renderer->pendingLookAt.store(true);
 }
 
 extern "C" JNIEXPORT jstring JNICALL

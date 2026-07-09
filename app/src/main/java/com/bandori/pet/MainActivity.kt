@@ -449,6 +449,7 @@ private fun Live2DStage(
                         interactionChanged = onInteraction
                         setInteractionLocked(locked)
                         setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                        setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
                         setModel(selectedModel)
                     }
                 },
@@ -457,6 +458,7 @@ private fun Live2DStage(
                     view.interactionChanged = onInteraction
                     view.setInteractionLocked(locked)
                     view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                    view.setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
                     view.setModel(selectedModel)
                 },
             )
@@ -1487,6 +1489,28 @@ private fun RenderSettingsCard(
                 Switch(
                     checked = settings.vsyncEnabled,
                     onCheckedChange = { enabled -> onSettingsChanged(settings.copy(vsyncEnabled = enabled)) },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("视线跟随", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.gazeFollowEnabled) {
+                            "点击 Live2D 或桌面壁纸时，模型会看向点击位置。"
+                        } else {
+                            "关闭时点击只触发原本的动作反馈。"
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = settings.gazeFollowEnabled,
+                    onCheckedChange = { enabled -> onSettingsChanged(settings.copy(gazeFollowEnabled = enabled)) },
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

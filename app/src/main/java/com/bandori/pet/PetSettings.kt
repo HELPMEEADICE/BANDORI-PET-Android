@@ -12,6 +12,7 @@ import org.json.JSONObject
 const val SETTINGS_PREFS = "bandori_pet_settings"
 const val KEY_FPS_LIMIT = "fps_limit"
 const val KEY_VSYNC_ENABLED = "vsync_enabled"
+const val KEY_GAZE_FOLLOW_ENABLED = "gaze_follow_enabled"
 const val KEY_LIVE2D_BACKGROUND_URI = "live2d_background_uri"
 const val KEY_WALLPAPER_BACKGROUND_URI = "wallpaper_background_uri"
 const val KEY_SELECTED_CHARACTER_ID = "selected_character_id"
@@ -114,6 +115,7 @@ fun DarkModeSetting.resolveDarkTheme(systemDark: Boolean): Boolean = when (this)
 data class RenderSettings(
     val fpsLimit: Int = 60,
     val vsyncEnabled: Boolean = true,
+    val gazeFollowEnabled: Boolean = false,
     val backgroundUri: String? = null,
 ) {
     fun save(context: Context) {
@@ -121,6 +123,7 @@ data class RenderSettings(
             .edit()
             .putInt(KEY_FPS_LIMIT, fpsLimit)
             .putBoolean(KEY_VSYNC_ENABLED, vsyncEnabled)
+            .putBoolean(KEY_GAZE_FOLLOW_ENABLED, gazeFollowEnabled)
             .apply {
                 if (backgroundUri.isNullOrBlank()) {
                     remove(KEY_LIVE2D_BACKGROUND_URI)
@@ -137,6 +140,7 @@ data class RenderSettings(
             return RenderSettings(
                 fpsLimit = prefs.getInt(KEY_FPS_LIMIT, 60).coerceIn(15, 120),
                 vsyncEnabled = prefs.getBoolean(KEY_VSYNC_ENABLED, true),
+                gazeFollowEnabled = prefs.getBoolean(KEY_GAZE_FOLLOW_ENABLED, false),
                 backgroundUri = prefs.getString(KEY_LIVE2D_BACKGROUND_URI, null),
             )
         }

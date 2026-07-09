@@ -35,6 +35,7 @@ class Live2DRenderView @JvmOverloads constructor(
     private var interactionLocked = true
     private var fpsLimit = 60
     private var vsyncEnabled = true
+    private var gazeFollowEnabled = false
     private var offsetX = 0f
     private var offsetY = 0f
     private var modelScale = 1f
@@ -84,6 +85,10 @@ class Live2DRenderView @JvmOverloads constructor(
         this.fpsLimit = nextFpsLimit
         this.vsyncEnabled = vsyncEnabled
         if (handle != 0L) NativeLive2D.setRenderOptions(handle, nextFpsLimit, vsyncEnabled)
+    }
+
+    fun setGazeFollowEnabled(enabled: Boolean) {
+        gazeFollowEnabled = enabled
     }
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
@@ -240,7 +245,10 @@ class Live2DRenderView @JvmOverloads constructor(
     private fun sendTouch(x: Float, y: Float) {
         val xRatio = x / max(width.toFloat(), 1f)
         val yRatio = y / max(height.toFloat(), 1f)
-        NativeLive2D.touch(handle, xRatio.coerceIn(0f, 1f), yRatio.coerceIn(0f, 1f))
+        val clampedX = xRatio.coerceIn(0f, 1f)
+        val clampedY = yRatio.coerceIn(0f, 1f)
+        NativeLive2D.touch(handle, clampedX, clampedY)
+        if (gazeFollowEnabled) NativeLive2D.lookAt(handle, clampedX, clampedY)
     }
 
     private fun pointerSpan(event: MotionEvent): Float {

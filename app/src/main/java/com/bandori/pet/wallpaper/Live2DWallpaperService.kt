@@ -78,7 +78,12 @@ class Live2DWallpaperService : WallpaperService() {
             if (event.actionMasked == MotionEvent.ACTION_UP && visible && handle != 0L) {
                 val xRatio = event.x / max(width.toFloat(), 1f)
                 val yRatio = event.y / max(height.toFloat(), 1f)
-                NativeLive2D.touch(handle, xRatio.coerceIn(0f, 1f), yRatio.coerceIn(0f, 1f))
+                val clampedX = xRatio.coerceIn(0f, 1f)
+                val clampedY = yRatio.coerceIn(0f, 1f)
+                NativeLive2D.touch(handle, clampedX, clampedY)
+                if (RenderSettings.load(applicationContext).gazeFollowEnabled) {
+                    NativeLive2D.lookAt(handle, clampedX, clampedY)
+                }
             }
         }
 
