@@ -37,6 +37,7 @@ class Live2DRenderView @JvmOverloads constructor(
     private var interactionLocked = true
     private var fpsLimit = 60
     private var vsyncEnabled = true
+    private var fpsDisplayEnabled = false
     private var gazeFollowEnabled = false
     private var offsetX = 0f
     private var offsetY = 0f
@@ -88,6 +89,12 @@ class Live2DRenderView @JvmOverloads constructor(
         this.fpsLimit = nextFpsLimit
         this.vsyncEnabled = vsyncEnabled
         if (handle != 0L) NativeLive2D.setRenderOptions(handle, nextFpsLimit, vsyncEnabled)
+    }
+
+    fun setFpsDisplayEnabled(enabled: Boolean) {
+        if (fpsDisplayEnabled == enabled) return
+        fpsDisplayEnabled = enabled
+        if (handle != 0L) NativeLive2D.setFpsDisplayEnabled(handle, enabled)
     }
 
     fun setGazeFollowEnabled(enabled: Boolean) {
@@ -151,6 +158,7 @@ class Live2DRenderView @JvmOverloads constructor(
                             fpsLimit,
                             vsyncEnabled,
                         )
+                        NativeLive2D.setFpsDisplayEnabled(handle, fpsDisplayEnabled)
                         applyTransform()
                     }
                     val accepted = handle != 0L && NativeLive2D.loadModel(

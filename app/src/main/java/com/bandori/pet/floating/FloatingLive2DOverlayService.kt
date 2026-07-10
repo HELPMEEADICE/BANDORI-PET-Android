@@ -63,6 +63,7 @@ class FloatingLive2DOverlayService : Service() {
                     locked = settings.locked,
                     touchThrough = settings.touchThrough,
                     fpsLimit = renderSettings.fpsLimit,
+                    fpsDisplayEnabled = renderSettings.fpsDisplayEnabled,
                     vsyncEnabled = renderSettings.vsyncEnabled,
                 )
             } else {
@@ -73,6 +74,7 @@ class FloatingLive2DOverlayService : Service() {
                     locked = settings.locked,
                     touchThrough = settings.touchThrough,
                     fpsLimit = renderSettings.fpsLimit,
+                    fpsDisplayEnabled = renderSettings.fpsDisplayEnabled,
                     vsyncEnabled = renderSettings.vsyncEnabled,
                     onBoundsChanged = { x, y, width, height ->
                         saveFloatingLive2DItemBounds(applicationContext, item.id, x, y, width, height)
@@ -101,6 +103,7 @@ class FloatingLive2DOverlayService : Service() {
         locked: Boolean,
         touchThrough: Boolean,
         fpsLimit: Int,
+        fpsDisplayEnabled: Boolean,
         vsyncEnabled: Boolean,
         onBoundsChanged: (Int, Int, Int, Int) -> Unit,
     ) {
@@ -108,6 +111,7 @@ class FloatingLive2DOverlayService : Service() {
         private val renderView = Live2DRenderView(context).apply {
             setInteractionLocked(true)
             setRenderOptions(fpsLimit, vsyncEnabled)
+            setFpsDisplayEnabled(fpsDisplayEnabled)
             setModel(item.model)
         }
 
@@ -146,10 +150,12 @@ class FloatingLive2DOverlayService : Service() {
             locked: Boolean,
             touchThrough: Boolean,
             fpsLimit: Int,
+            fpsDisplayEnabled: Boolean,
             vsyncEnabled: Boolean,
         ) {
             root.setLocked(locked)
             renderView.setRenderOptions(fpsLimit, vsyncEnabled)
+            renderView.setFpsDisplayEnabled(fpsDisplayEnabled)
             val nextWidth = item.width.coerceIn(MIN_WIDTH, MAX_WIDTH)
             val nextHeight = item.height.coerceIn(MIN_HEIGHT, MAX_HEIGHT)
             val nextFlags = overlayWindowFlags(touchThrough)

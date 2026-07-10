@@ -28,6 +28,7 @@ object NativeLive2D {
     external fun resize(handle: Long, width: Int, height: Int)
     external fun loadModel(handle: Long, modelPath: String, resourcePaths: Array<String>, resourceBytes: Array<ByteArray>): Boolean
     external fun setRenderOptions(handle: Long, fpsLimit: Int, vsyncEnabled: Boolean)
+    external fun setFpsDisplayEnabled(handle: Long, enabled: Boolean)
     external fun setTransform(handle: Long, offsetX: Float, offsetY: Float, scale: Float)
     external fun setBackgroundPixels(handle: Long, pixels: IntArray?, width: Int, height: Int)
     external fun touch(handle: Long, x: Float, y: Float)

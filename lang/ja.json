@@ -44,6 +44,9 @@
     "settings_live2d_desc": "これらのオプションはすぐに反映され、自動保存されます。",
 
     "settings_fps_limit": "レンダリングFPS制限",
+    "settings_fps_display": "FPS表示",
+    "settings_fps_display_on": "各モデルの左上に現在のレンダリングFPSを表示します。",
+    "settings_fps_display_off": "現在のレンダリングFPSを表示しません。",
     "settings_vsync": "垂直同期",
     "settings_vsync_on": "画面のリフレッシュレートに合わせて、ティアリングを軽減します。",
     "settings_vsync_off": "オフの場合、FPS制限のみが適用されます。",

@@ -123,6 +123,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                         setInteractionLocked(false)
                         val renderSettings = RenderSettings.load(appContext)
                         setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                        setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                         setTransform(transform)
                         setModel(selectedModel)
                     }
@@ -133,6 +134,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                     view.setInteractionLocked(false)
                     val renderSettings = RenderSettings.load(appContext)
                     view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                    view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                     view.setTransform(transform)
                     view.setModel(selectedModel)
                 },
@@ -207,5 +209,4 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
         }
     }
 }
-
 

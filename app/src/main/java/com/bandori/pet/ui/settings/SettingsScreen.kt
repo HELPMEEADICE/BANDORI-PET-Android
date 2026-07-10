@@ -271,6 +271,28 @@ private fun RenderSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(I18n.t("settings_fps_display"), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.fpsDisplayEnabled) {
+                            I18n.t("settings_fps_display_on")
+                        } else {
+                            I18n.t("settings_fps_display_off")
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = settings.fpsDisplayEnabled,
+                    onCheckedChange = { enabled -> onSettingsChanged(settings.copy(fpsDisplayEnabled = enabled)) },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(I18n.t("settings_vsync"), fontWeight = FontWeight.SemiBold)
                     Text(
                         if (settings.vsyncEnabled) I18n.t("settings_vsync_on") else I18n.t("settings_vsync_off"),

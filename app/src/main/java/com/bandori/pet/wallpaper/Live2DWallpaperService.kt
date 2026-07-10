@@ -1,10 +1,14 @@
 package com.bandori.pet.wallpaper
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import com.bandori.pet.RenderSettings
+import com.bandori.pet.KEY_FPS_DISPLAY_ENABLED
+import com.bandori.pet.SETTINGS_PREFS
 import com.bandori.pet.isWallpaperEnabled
 import com.bandori.pet.loadPersistedModelChoice
 import com.bandori.pet.loadWallpaperBackgroundUri
@@ -32,16 +36,30 @@ class Live2DWallpaperService : WallpaperService() {
         private var height = 1
         private var loadGeneration = 0
         private var surfaceHolderRef: SurfaceHolder? = null
+        private var settingsPreferences: SharedPreferences? = null
+        private val renderSettingsListener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == KEY_FPS_DISPLAY_ENABLED && handle != 0L) {
+                NativeLive2D.setFpsDisplayEnabled(
+                    handle,
+                    preferences.getBoolean(KEY_FPS_DISPLAY_ENABLED, false),
+                )
+            }
+        }
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
             surfaceHolderRef = surfaceHolder
+            settingsPreferences = applicationContext.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE).also {
+                it.registerOnSharedPreferenceChangeListener(renderSettingsListener)
+            }
             setTouchEventsEnabled(true)
             surfaceHolder.addCallback(this)
         }
 
         override fun onDestroy() {
             surfaceHolderRef?.removeCallback(this)
+            settingsPreferences?.unregisterOnSharedPreferenceChangeListener(renderSettingsListener)
+            settingsPreferences = null
             stopRenderer()
             scope.cancel()
             super.onDestroy()
@@ -132,6 +150,7 @@ class Live2DWallpaperService : WallpaperService() {
                             NativeLive2D.setBackground(handle, background)
                         }
                         if (handle != 0L) {
+                            NativeLive2D.setFpsDisplayEnabled(handle, settings.fpsDisplayEnabled)
                             NativeLive2D.loadModel(
                                 handle,
                                 prepared.modelPath,

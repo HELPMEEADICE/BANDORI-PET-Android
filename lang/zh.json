@@ -44,6 +44,9 @@
     "settings_live2d_desc": "这些选项会立即应用并自动保存。",
 
     "settings_fps_limit": "模型渲染 FPS 限制",
+    "settings_fps_display": "FPS 显示",
+    "settings_fps_display_on": "在每个模型的左上角显示当前渲染帧率。",
+    "settings_fps_display_off": "关闭后不显示当前渲染帧率。",
     "settings_vsync": "垂直同步",
     "settings_vsync_on": "跟随屏幕刷新，减少画面撕裂。",
     "settings_vsync_off": "关闭后只受 FPS 限制影响。",

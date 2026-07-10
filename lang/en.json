@@ -44,6 +44,9 @@
     "settings_live2d_desc": "These options take effect immediately and are saved automatically.",
 
     "settings_fps_limit": "Render FPS Limit",
+    "settings_fps_display": "FPS Display",
+    "settings_fps_display_on": "Shows the current render rate at the upper left of every model.",
+    "settings_fps_display_off": "The current render rate is hidden.",
     "settings_vsync": "Vertical Sync",
     "settings_vsync_on": "Match screen refresh rate to reduce tearing.",
     "settings_vsync_off": "When off, only the FPS limit applies.",

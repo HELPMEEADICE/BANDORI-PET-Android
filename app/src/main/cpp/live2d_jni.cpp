@@ -103,6 +103,7 @@ struct Renderer {
     std::atomic<bool> pendingRenderOptions{false};
     std::atomic<int> fpsLimit{60};
     std::atomic<bool> vsyncEnabled{true};
+    std::atomic<bool> fpsDisplayEnabled{false};
     std::atomic<float> transformOffsetX{0.0f};
     std::atomic<float> transformOffsetY{0.0f};
     std::atomic<float> transformScale{1.0f};
@@ -115,6 +116,11 @@ struct Renderer {
     int backgroundWidth = 0;
     int backgroundHeight = 0;
     bool backgroundEnabled = false;
+    GLuint fpsProgram = 0;
+    GLuint fpsBuffer = 0;
+    GLint fpsPositionAttrib = -1;
+    GLint fpsColorUniform = -1;
+    GLint fpsOffsetUniform = -1;
 };
 
 static int positiveSize(int value) {
@@ -486,6 +492,201 @@ static void drawBackground(Renderer* renderer) {
     glDisableVertexAttribArray(renderer->backgroundTexCoordAttrib);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+static GLuint compileFpsShader(Renderer* renderer, GLenum type, const char* source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+        char log[512] = {0};
+        glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
+        setError(renderer, std::string("FPS shader 编译失败: ") + log);
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+static bool ensureFpsProgram(Renderer* renderer) {
+    if (renderer->fpsProgram != 0) return true;
+
+    static const char* vertexSource = R"glsl(
+attribute vec2 aPosition;
+uniform vec2 uOffset;
+void main() {
+    gl_Position = vec4(aPosition + uOffset, 0.0, 1.0);
+}
+)glsl";
+    static const char* fragmentSource = R"glsl(
+precision mediump float;
+uniform vec4 uColor;
+void main() {
+    gl_FragColor = uColor;
+}
+)glsl";
+
+    GLuint vertexShader = compileFpsShader(renderer, GL_VERTEX_SHADER, vertexSource);
+    if (vertexShader == 0) return false;
+    GLuint fragmentShader = compileFpsShader(renderer, GL_FRAGMENT_SHADER, fragmentSource);
+    if (fragmentShader == 0) {
+        glDeleteShader(vertexShader);
+        return false;
+    }
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        char log[512] = {0};
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        setError(renderer, std::string("FPS shader 链接失败: ") + log);
+        glDeleteProgram(program);
+        return false;
+    }
+
+    renderer->fpsProgram = program;
+    renderer->fpsPositionAttrib = glGetAttribLocation(program, "aPosition");
+    renderer->fpsColorUniform = glGetUniformLocation(program, "uColor");
+    renderer->fpsOffsetUniform = glGetUniformLocation(program, "uOffset");
+    glGenBuffers(1, &renderer->fpsBuffer);
+    return renderer->fpsPositionAttrib >= 0
+        && renderer->fpsColorUniform >= 0
+        && renderer->fpsOffsetUniform >= 0
+        && renderer->fpsBuffer != 0;
+}
+
+static void destroyFpsResources(Renderer* renderer) {
+    if (renderer->fpsBuffer != 0) {
+        glDeleteBuffers(1, &renderer->fpsBuffer);
+        renderer->fpsBuffer = 0;
+    }
+    if (renderer->fpsProgram != 0) {
+        glDeleteProgram(renderer->fpsProgram);
+        renderer->fpsProgram = 0;
+    }
+}
+
+static const uint8_t* fpsGlyph(char character) {
+    static constexpr uint8_t F[7] = {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10};
+    static constexpr uint8_t P[7] = {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10};
+    static constexpr uint8_t S[7] = {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E};
+    static constexpr uint8_t ZERO[7] = {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E};
+    static constexpr uint8_t ONE[7] = {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E};
+    static constexpr uint8_t TWO[7] = {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F};
+    static constexpr uint8_t THREE[7] = {0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E};
+    static constexpr uint8_t FOUR[7] = {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02};
+    static constexpr uint8_t FIVE[7] = {0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E};
+    static constexpr uint8_t SIX[7] = {0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E};
+    static constexpr uint8_t SEVEN[7] = {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08};
+    static constexpr uint8_t EIGHT[7] = {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E};
+    static constexpr uint8_t NINE[7] = {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E};
+    switch (character) {
+        case 'F': return F;
+        case 'P': return P;
+        case 'S': return S;
+        case '0': return ZERO;
+        case '1': return ONE;
+        case '2': return TWO;
+        case '3': return THREE;
+        case '4': return FOUR;
+        case '5': return FIVE;
+        case '6': return SIX;
+        case '7': return SEVEN;
+        case '8': return EIGHT;
+        case '9': return NINE;
+        default: return nullptr;
+    }
+}
+
+static void appendFpsText(
+    std::vector<GLfloat>& vertices,
+    const std::string& text,
+    int surfaceWidth,
+    int surfaceHeight,
+    float cellSize
+) {
+    const float pixelToNdcX = 2.0f / static_cast<float>(positiveSize(surfaceWidth));
+    const float pixelToNdcY = 2.0f / static_cast<float>(positiveSize(surfaceHeight));
+    const float margin = cellSize * 1.25f;
+    const float gap = cellSize * 0.12f;
+    float originX = margin;
+    const float originY = margin;
+
+    for (const char character : text) {
+        const uint8_t* glyph = fpsGlyph(character);
+        if (glyph != nullptr) {
+            for (int row = 0; row < 7; ++row) {
+                for (int column = 0; column < 5; ++column) {
+                    if ((glyph[row] & (1U << (4 - column))) == 0) continue;
+                    const float x0 = -1.0f + (originX + column * cellSize) * pixelToNdcX;
+                    const float x1 = -1.0f + (originX + (column + 1) * cellSize - gap) * pixelToNdcX;
+                    const float y0 = 1.0f - (originY + row * cellSize) * pixelToNdcY;
+                    const float y1 = 1.0f - (originY + (row + 1) * cellSize - gap) * pixelToNdcY;
+                    vertices.insert(vertices.end(), {
+                        x0, y0, x1, y0, x0, y1,
+                        x1, y0, x1, y1, x0, y1,
+                    });
+                }
+            }
+        }
+        originX += cellSize * 6.0f;
+    }
+}
+
+static void drawFps(Renderer* renderer, int fps) {
+    if (!renderer->fpsDisplayEnabled.load() || !ensureFpsProgram(renderer)) return;
+
+    const int surfaceWidth = positiveSize(renderer->width.load());
+    const int surfaceHeight = positiveSize(renderer->height.load());
+    const float cellSize = std::clamp(
+        std::min(surfaceWidth / 46.0f, surfaceHeight / 32.0f),
+        3.0f,
+        7.0f
+    );
+    std::vector<GLfloat> vertices;
+    const std::string text = "FPS " + std::to_string(std::clamp(fps, 0, 999));
+    vertices.reserve(text.size() * 7 * 5 * 12);
+    appendFpsText(vertices, text, surfaceWidth, surfaceHeight, cellSize);
+    if (vertices.empty()) return;
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(renderer->fpsProgram);
+    glBindBuffer(GL_ARRAY_BUFFER, renderer->fpsBuffer);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        static_cast<GLsizeiptr>(vertices.size() * sizeof(GLfloat)),
+        vertices.data(),
+        GL_DYNAMIC_DRAW
+    );
+    glEnableVertexAttribArray(renderer->fpsPositionAttrib);
+    glVertexAttribPointer(
+        renderer->fpsPositionAttrib,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+        2 * sizeof(GLfloat),
+        reinterpret_cast<void*>(0)
+    );
+    glUniform2f(renderer->fpsOffsetUniform, 3.0f / surfaceWidth, -3.0f / surfaceHeight);
+    glUniform4f(renderer->fpsColorUniform, 0.0f, 0.0f, 0.0f, 0.8f);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 2));
+    glUniform2f(renderer->fpsOffsetUniform, 0.0f, 0.0f);
+    glUniform4f(renderer->fpsColorUniform, 1.0f, 1.0f, 1.0f, 0.95f);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 2));
+    glDisableVertexAttribArray(renderer->fpsPositionAttrib);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 static bool initLua(Renderer* renderer) {
@@ -957,6 +1158,9 @@ static void renderLoop(Renderer* renderer) {
     if (!initEgl(renderer) || !initLua(renderer)) return;
 
     auto previousFrameStart = std::chrono::steady_clock::now();
+    auto fpsSampleStart = previousFrameStart;
+    int framesSinceFpsSample = 0;
+    int measuredFps = 0;
     while (renderer->running.load()) {
         const auto frameStart = std::chrono::steady_clock::now();
         const float deltaSeconds = std::clamp(
@@ -1062,7 +1266,21 @@ static void renderLoop(Renderer* renderer) {
         const auto timeMs = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
         renderer->luaApi.pushNumber(renderer->lua, static_cast<double>(timeMs));
         callLua(renderer, "__bp_draw", 1);
-        eglSwapBuffers(renderer->display, renderer->surface);
+        drawFps(renderer, measuredFps);
+        if (eglSwapBuffers(renderer->display, renderer->surface) == EGL_TRUE) {
+            ++framesSinceFpsSample;
+            const auto fpsSampleNow = std::chrono::steady_clock::now();
+            const float elapsedSeconds = std::chrono::duration<float>(fpsSampleNow - fpsSampleStart).count();
+            if (elapsedSeconds >= 0.5f) {
+                measuredFps = std::clamp(
+                    static_cast<int>(std::lround(framesSinceFpsSample / elapsedSeconds)),
+                    0,
+                    999
+                );
+                framesSinceFpsSample = 0;
+                fpsSampleStart = fpsSampleNow;
+            }
+        }
 
         const int fpsLimit = renderer->fpsLimit.load();
         if (fpsLimit > 0) {
@@ -1072,6 +1290,7 @@ static void renderLoop(Renderer* renderer) {
     }
 
     destroyBackgroundResources(renderer);
+    destroyFpsResources(renderer);
 }
 
 static void cleanup(Renderer* renderer) {
@@ -1173,6 +1392,13 @@ Java_com_bandori_pet_live2d_NativeLive2D_setRenderOptions(JNIEnv*, jobject, jlon
     renderer->fpsLimit.store(fpsLimit > 0 ? fpsLimit : 60);
     renderer->vsyncEnabled.store(vsyncEnabled == JNI_TRUE);
     renderer->pendingRenderOptions.store(true);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_setFpsDisplayEnabled(JNIEnv*, jobject, jlong handle, jboolean enabled) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+    renderer->fpsDisplayEnabled.store(enabled == JNI_TRUE);
 }
 
 extern "C" JNIEXPORT void JNICALL

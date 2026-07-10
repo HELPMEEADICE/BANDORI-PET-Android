@@ -178,6 +178,7 @@ fun Live2DStage(
                         interactionChanged = onInteraction
                         setInteractionLocked(locked)
                         setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                        setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                         setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
                         setModel(selectedModel)
                     }
@@ -187,6 +188,7 @@ fun Live2DStage(
                     view.interactionChanged = onInteraction
                     view.setInteractionLocked(locked)
                     view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                    view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                     view.setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
                     view.setModel(selectedModel)
                 },
