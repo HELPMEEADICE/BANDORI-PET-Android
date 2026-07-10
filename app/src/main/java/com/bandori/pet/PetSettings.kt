@@ -37,10 +37,10 @@ private const val DEFAULT_FLOATING_OVERLAY_HEIGHT = 520
 private const val FLOATING_OVERLAY_CASCADE_OFFSET = 36
 
 enum class RenderResolution(val value: String, val scale: Float) {
-    SuperSampling("x2", 2f),
-    PointToPoint("point_to_point", 1f),
-    TwoThirds("two_thirds", 2f / 3f),
     Half("half", 0.5f),
+    TwoThirds("two_thirds", 2f / 3f),
+    PointToPoint("point_to_point", 1f),
+    SuperSampling("x2", 2f),
     ;
 
     companion object {
