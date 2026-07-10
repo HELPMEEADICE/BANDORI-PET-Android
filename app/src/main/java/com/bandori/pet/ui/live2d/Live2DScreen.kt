@@ -34,10 +34,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -61,7 +59,6 @@ fun Live2DScreen(
     selectedModel: ModelChoice?,
     renderSettings: RenderSettings,
     fullScreen: Boolean,
-    predictiveBackProgress: Float = 0f,
     onFullScreenChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -83,7 +80,6 @@ fun Live2DScreen(
     }
 
     if (fullScreen) {
-        val backProgress = predictiveBackProgress.coerceIn(0f, 1f)
         Live2DStage(
             selectedModel = selectedModel,
             renderSettings = renderSettings,
@@ -91,7 +87,7 @@ fun Live2DScreen(
             locked = locked,
             controlsVisible = controlsVisible,
             fullScreen = true,
-            cornerRadius = 32.dp * backProgress,
+            cornerRadius = 0.dp,
             onStatusChanged = { status = it },
             onInteraction = { revealControls() },
             onLockedChange = {
@@ -102,14 +98,7 @@ fun Live2DScreen(
                 onFullScreenChanged(it)
                 revealControls()
             },
-            modifier = modifier.graphicsLayer {
-                val scale = 1f - backProgress * 0.08f
-                scaleX = scale
-                scaleY = scale
-                alpha = 1f - backProgress * 0.2f
-                transformOrigin = TransformOrigin.Center
-                translationX = size.width * backProgress * 0.12f
-            },
+            modifier = modifier,
         )
     } else {
         ElevatedCard(
