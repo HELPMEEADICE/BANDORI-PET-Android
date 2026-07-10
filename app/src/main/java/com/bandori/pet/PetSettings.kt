@@ -13,6 +13,7 @@ const val SETTINGS_PREFS = "bandori_pet_settings"
 const val KEY_FPS_LIMIT = "fps_limit"
 const val KEY_FPS_DISPLAY_ENABLED = "fps_display_enabled"
 const val KEY_VSYNC_ENABLED = "vsync_enabled"
+const val KEY_RENDER_RESOLUTION = "render_resolution"
 const val KEY_GAZE_FOLLOW_ENABLED = "gaze_follow_enabled"
 const val KEY_LIVE2D_BACKGROUND_URI = "live2d_background_uri"
 const val KEY_WALLPAPER_BACKGROUND_URI = "wallpaper_background_uri"
@@ -34,6 +35,19 @@ private const val DEFAULT_FLOATING_OVERLAY_Y = 160
 private const val DEFAULT_FLOATING_OVERLAY_WIDTH = 360
 private const val DEFAULT_FLOATING_OVERLAY_HEIGHT = 520
 private const val FLOATING_OVERLAY_CASCADE_OFFSET = 36
+
+enum class RenderResolution(val value: String, val scale: Float) {
+    SuperSampling("x2", 2f),
+    PointToPoint("point_to_point", 1f),
+    TwoThirds("two_thirds", 2f / 3f),
+    Half("half", 0.5f),
+    ;
+
+    companion object {
+        fun fromValue(value: String?): RenderResolution =
+            entries.firstOrNull { it.value == value } ?: PointToPoint
+    }
+}
 
 data class FloatingLive2DItem(
     val id: String,
@@ -117,6 +131,7 @@ data class RenderSettings(
     val fpsLimit: Int = 60,
     val fpsDisplayEnabled: Boolean = false,
     val vsyncEnabled: Boolean = true,
+    val renderResolution: RenderResolution = RenderResolution.PointToPoint,
     val gazeFollowEnabled: Boolean = false,
     val backgroundUri: String? = null,
 ) {
@@ -126,6 +141,7 @@ data class RenderSettings(
             .putInt(KEY_FPS_LIMIT, fpsLimit)
             .putBoolean(KEY_FPS_DISPLAY_ENABLED, fpsDisplayEnabled)
             .putBoolean(KEY_VSYNC_ENABLED, vsyncEnabled)
+            .putString(KEY_RENDER_RESOLUTION, renderResolution.value)
             .putBoolean(KEY_GAZE_FOLLOW_ENABLED, gazeFollowEnabled)
             .apply {
                 if (backgroundUri.isNullOrBlank()) {
@@ -144,6 +160,7 @@ data class RenderSettings(
                 fpsLimit = prefs.getInt(KEY_FPS_LIMIT, 60).coerceIn(15, 120),
                 fpsDisplayEnabled = prefs.getBoolean(KEY_FPS_DISPLAY_ENABLED, false),
                 vsyncEnabled = prefs.getBoolean(KEY_VSYNC_ENABLED, true),
+                renderResolution = RenderResolution.fromValue(prefs.getString(KEY_RENDER_RESOLUTION, null)),
                 gazeFollowEnabled = prefs.getBoolean(KEY_GAZE_FOLLOW_ENABLED, false),
                 backgroundUri = prefs.getString(KEY_LIVE2D_BACKGROUND_URI, null),
             )

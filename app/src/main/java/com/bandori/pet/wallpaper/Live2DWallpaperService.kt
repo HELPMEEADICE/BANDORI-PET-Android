@@ -8,6 +8,7 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.KEY_FPS_DISPLAY_ENABLED
+import com.bandori.pet.KEY_RENDER_RESOLUTION
 import com.bandori.pet.SETTINGS_PREFS
 import com.bandori.pet.isWallpaperEnabled
 import com.bandori.pet.loadPersistedModelChoice
@@ -38,11 +39,18 @@ class Live2DWallpaperService : WallpaperService() {
         private var surfaceHolderRef: SurfaceHolder? = null
         private var settingsPreferences: SharedPreferences? = null
         private val renderSettingsListener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
-            if (key == KEY_FPS_DISPLAY_ENABLED && handle != 0L) {
-                NativeLive2D.setFpsDisplayEnabled(
-                    handle,
-                    preferences.getBoolean(KEY_FPS_DISPLAY_ENABLED, false),
-                )
+            if (handle != 0L) {
+                when (key) {
+                    KEY_FPS_DISPLAY_ENABLED -> {
+                        NativeLive2D.setFpsDisplayEnabled(
+                            handle,
+                            preferences.getBoolean(KEY_FPS_DISPLAY_ENABLED, false),
+                        )
+                    }
+                    KEY_RENDER_RESOLUTION -> {
+                        NativeLive2D.setRenderScale(handle, RenderSettings.load(applicationContext).renderResolution.scale)
+                    }
+                }
             }
         }
 
@@ -142,6 +150,7 @@ class Live2DWallpaperService : WallpaperService() {
                                 height,
                                 settings.fpsLimit,
                                 settings.vsyncEnabled,
+                                settings.renderResolution.scale,
                             )
                             NativeLive2D.setBackground(handle, background)
                             applyWallpaperTransform()

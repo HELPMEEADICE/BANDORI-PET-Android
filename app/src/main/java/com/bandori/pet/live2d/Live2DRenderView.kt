@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
 import com.bandori.pet.I18n
+import com.bandori.pet.RenderResolution
 import com.bandori.pet.data.ModelChoice
 import kotlin.math.hypot
 import kotlin.math.max
@@ -37,6 +38,7 @@ class Live2DRenderView @JvmOverloads constructor(
     private var interactionLocked = true
     private var fpsLimit = 60
     private var vsyncEnabled = true
+    private var renderResolution = RenderResolution.PointToPoint
     private var fpsDisplayEnabled = false
     private var gazeFollowEnabled = false
     private var offsetX = 0f
@@ -89,6 +91,12 @@ class Live2DRenderView @JvmOverloads constructor(
         this.fpsLimit = nextFpsLimit
         this.vsyncEnabled = vsyncEnabled
         if (handle != 0L) NativeLive2D.setRenderOptions(handle, nextFpsLimit, vsyncEnabled)
+    }
+
+    fun setRenderResolution(resolution: RenderResolution) {
+        if (renderResolution == resolution) return
+        renderResolution = resolution
+        if (handle != 0L) NativeLive2D.setRenderScale(handle, resolution.scale)
     }
 
     fun setFpsDisplayEnabled(enabled: Boolean) {
@@ -157,6 +165,7 @@ class Live2DRenderView @JvmOverloads constructor(
                             height.coerceAtLeast(1),
                             fpsLimit,
                             vsyncEnabled,
+                            renderResolution.scale,
                         )
                         NativeLive2D.setFpsDisplayEnabled(handle, fpsDisplayEnabled)
                         applyTransform()

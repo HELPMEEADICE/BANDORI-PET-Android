@@ -33,7 +33,6 @@
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "BandoriPet", __VA_ARGS__)
 
-static constexpr int MAX_RENDER_EDGE = 1280;
 static constexpr float GAZE_FOLLOW_EASING_PER_SECOND = 8.0f;
 
 struct lua_State;
@@ -72,8 +71,11 @@ struct Renderer {
     EGLDisplay display = EGL_NO_DISPLAY;
     EGLSurface surface = EGL_NO_SURFACE;
     EGLContext context = EGL_NO_CONTEXT;
+    std::atomic<int> surfaceWidth{1};
+    std::atomic<int> surfaceHeight{1};
     std::atomic<int> width{1};
     std::atomic<int> height{1};
+    std::atomic<float> renderScale{1.0f};
 
     LuaApi luaApi;
     lua_State* lua = nullptr;
@@ -130,15 +132,11 @@ static int positiveSize(int value) {
 static void configureRenderSize(Renderer* renderer, int surfaceWidth, int surfaceHeight) {
     const int srcWidth = positiveSize(surfaceWidth);
     const int srcHeight = positiveSize(surfaceHeight);
-    const int maxEdge = srcWidth > srcHeight ? srcWidth : srcHeight;
-    int renderWidth = srcWidth;
-    int renderHeight = srcHeight;
-    if (maxEdge > MAX_RENDER_EDGE) {
-        renderWidth = (srcWidth * MAX_RENDER_EDGE + maxEdge / 2) / maxEdge;
-        renderHeight = (srcHeight * MAX_RENDER_EDGE + maxEdge / 2) / maxEdge;
-        if (renderWidth < 1) renderWidth = 1;
-        if (renderHeight < 1) renderHeight = 1;
-    }
+    const float scale = std::clamp(renderer->renderScale.load(), 0.5f, 2.0f);
+    const int renderWidth = std::max(1, static_cast<int>(std::lround(srcWidth * scale)));
+    const int renderHeight = std::max(1, static_cast<int>(std::lround(srcHeight * scale)));
+    renderer->surfaceWidth.store(srcWidth);
+    renderer->surfaceHeight.store(srcHeight);
     renderer->width.store(renderWidth);
     renderer->height.store(renderHeight);
     if (renderer->window != nullptr) {
@@ -1314,11 +1312,13 @@ Java_com_bandori_pet_live2d_NativeLive2D_create(
     jint width,
     jint height,
     jint fpsLimit,
-    jboolean vsyncEnabled
+    jboolean vsyncEnabled,
+    jfloat renderScale
 ) {
     auto* renderer = new Renderer();
     renderer->fpsLimit.store(fpsLimit > 0 ? fpsLimit : 60);
     renderer->vsyncEnabled.store(vsyncEnabled == JNI_TRUE);
+    renderer->renderScale.store(std::clamp(static_cast<float>(renderScale), 0.5f, 2.0f));
     const char* runtimeChars = env->GetStringUTFChars(runtimeRoot, nullptr);
     renderer->runtimeRoot = runtimeChars != nullptr ? runtimeChars : "";
     if (runtimeChars != nullptr) env->ReleaseStringUTFChars(runtimeRoot, runtimeChars);
@@ -1392,6 +1392,15 @@ Java_com_bandori_pet_live2d_NativeLive2D_setRenderOptions(JNIEnv*, jobject, jlon
     renderer->fpsLimit.store(fpsLimit > 0 ? fpsLimit : 60);
     renderer->vsyncEnabled.store(vsyncEnabled == JNI_TRUE);
     renderer->pendingRenderOptions.store(true);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_setRenderScale(JNIEnv*, jobject, jlong handle, jfloat scale) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+    renderer->renderScale.store(std::clamp(static_cast<float>(scale), 0.5f, 2.0f));
+    configureRenderSize(renderer, renderer->surfaceWidth.load(), renderer->surfaceHeight.load());
+    renderer->pendingResize.store(true);
 }
 
 extern "C" JNIEXPORT void JNICALL

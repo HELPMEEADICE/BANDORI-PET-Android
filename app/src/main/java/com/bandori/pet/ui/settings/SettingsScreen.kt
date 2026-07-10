@@ -50,6 +50,7 @@ import com.bandori.pet.DarkModeSetting
 import com.bandori.pet.FloatingLive2DItem
 import com.bandori.pet.FloatingOverlaySettings
 import com.bandori.pet.I18n
+import com.bandori.pet.RenderResolution
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.ThemeSettings
 import com.bandori.pet.addFloatingLive2DItem
@@ -263,6 +264,31 @@ private fun RenderSettingsCard(
                     },
                     valueRange = 15f..120f,
                     steps = 20,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(I18n.t("settings_render_resolution"), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        renderResolutionLabel(settings.renderResolution),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Slider(
+                    value = settings.renderResolution.ordinal.toFloat(),
+                    onValueChange = { value ->
+                        val resolution = RenderResolution.entries[
+                            value.roundToInt().coerceIn(RenderResolution.entries.indices),
+                        ]
+                        onSettingsChanged(settings.copy(renderResolution = resolution))
+                    },
+                    valueRange = 0f..RenderResolution.entries.lastIndex.toFloat(),
+                    steps = RenderResolution.entries.size - 2,
                 )
             }
             Row(
@@ -694,6 +720,13 @@ private fun darkModeDescription(mode: DarkModeSetting): String = when (mode) {
     DarkModeSetting.On -> I18n.t("settings_dark_mode_on_desc")
     DarkModeSetting.Off -> I18n.t("settings_dark_mode_off_desc")
     DarkModeSetting.System -> I18n.t("settings_dark_mode_system_desc")
+}
+
+private fun renderResolutionLabel(resolution: RenderResolution): String = when (resolution) {
+    RenderResolution.SuperSampling -> I18n.t("settings_render_resolution_x2")
+    RenderResolution.PointToPoint -> I18n.t("settings_render_resolution_point_to_point")
+    RenderResolution.TwoThirds -> I18n.t("settings_render_resolution_two_thirds")
+    RenderResolution.Half -> I18n.t("settings_render_resolution_half")
 }
 
 private fun openLiveWallpaperPicker(context: android.content.Context) {

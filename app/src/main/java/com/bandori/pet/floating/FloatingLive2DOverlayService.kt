@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import com.bandori.pet.FloatingLive2DItem
 import com.bandori.pet.FloatingOverlaySettings
+import com.bandori.pet.RenderResolution
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.saveFloatingLive2DItemBounds
@@ -65,6 +66,7 @@ class FloatingLive2DOverlayService : Service() {
                     fpsLimit = renderSettings.fpsLimit,
                     fpsDisplayEnabled = renderSettings.fpsDisplayEnabled,
                     vsyncEnabled = renderSettings.vsyncEnabled,
+                    renderResolution = renderSettings.renderResolution,
                 )
             } else {
                 if (existing != null) removeWindow(item.id)
@@ -76,6 +78,7 @@ class FloatingLive2DOverlayService : Service() {
                     fpsLimit = renderSettings.fpsLimit,
                     fpsDisplayEnabled = renderSettings.fpsDisplayEnabled,
                     vsyncEnabled = renderSettings.vsyncEnabled,
+                    renderResolution = renderSettings.renderResolution,
                     onBoundsChanged = { x, y, width, height ->
                         saveFloatingLive2DItemBounds(applicationContext, item.id, x, y, width, height)
                     },
@@ -105,12 +108,14 @@ class FloatingLive2DOverlayService : Service() {
         fpsLimit: Int,
         fpsDisplayEnabled: Boolean,
         vsyncEnabled: Boolean,
+        renderResolution: RenderResolution,
         onBoundsChanged: (Int, Int, Int, Int) -> Unit,
     ) {
         private val modelAssetPath = item.model.modelAssetPath
         private val renderView = Live2DRenderView(context).apply {
             setInteractionLocked(true)
             setRenderOptions(fpsLimit, vsyncEnabled)
+            setRenderResolution(renderResolution)
             setFpsDisplayEnabled(fpsDisplayEnabled)
             setModel(item.model)
         }
@@ -152,9 +157,11 @@ class FloatingLive2DOverlayService : Service() {
             fpsLimit: Int,
             fpsDisplayEnabled: Boolean,
             vsyncEnabled: Boolean,
+            renderResolution: RenderResolution,
         ) {
             root.setLocked(locked)
             renderView.setRenderOptions(fpsLimit, vsyncEnabled)
+            renderView.setRenderResolution(renderResolution)
             renderView.setFpsDisplayEnabled(fpsDisplayEnabled)
             val nextWidth = item.width.coerceIn(MIN_WIDTH, MAX_WIDTH)
             val nextHeight = item.height.coerceIn(MIN_HEIGHT, MAX_HEIGHT)
