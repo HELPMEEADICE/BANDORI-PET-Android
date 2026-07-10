@@ -26,6 +26,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".FullscreenLive2DActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
         <service
             android:name=".wallpaper.Live2DWallpaperService"
             android:exported="true"
