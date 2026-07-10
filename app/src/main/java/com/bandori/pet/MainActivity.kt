@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -113,6 +114,7 @@ fun BandoriPetApp(
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
     var preferredModelAssetPath by remember { mutableStateOf(loadSelectedModelAssetPath(appContext)) }
     var live2DFullScreen by remember { mutableStateOf(false) }
+    var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
     var modelAssetsVersion by remember { mutableStateOf(0) }
     var renderSettings by remember { mutableStateOf(RenderSettings.load(appContext)) }
     val repository = remember { DataRepository(appContext) }
@@ -129,9 +131,14 @@ fun BandoriPetApp(
 
     PredictiveBackHandler(enabled = live2DFullScreen) { progress ->
         try {
-            progress.collect { }
+            progress.collect { event ->
+                predictiveBackProgress = event.progress
+            }
             live2DFullScreen = false
         } catch (_: CancellationException) {
+            // The user released the gesture before committing the back navigation.
+        } finally {
+            predictiveBackProgress = 0f
         }
     }
 
@@ -172,6 +179,7 @@ fun BandoriPetApp(
                 selectedModel = selectedModel,
                 renderSettings = renderSettings,
                 fullScreen = true,
+                predictiveBackProgress = predictiveBackProgress,
                 onFullScreenChanged = { live2DFullScreen = it },
                 modifier = Modifier.fillMaxSize(),
             )
