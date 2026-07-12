@@ -221,7 +221,7 @@ private fun LlmSettingsScreen(onBack: () -> Unit) {
     var predictiveBackProgress by remember { mutableStateOf(0f) }
     var predictiveBackEdge by remember { mutableStateOf(BackEventCompat.EDGE_LEFT) }
 
-    PredictiveBackHandler {
+    PredictiveBackHandler { progress ->
         try {
             progress.collect { backEvent ->
                 predictiveBackProgress = backEvent.progress
