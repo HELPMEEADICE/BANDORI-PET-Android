@@ -44,11 +44,13 @@ class Live2DRenderView @JvmOverloads constructor(
     private var offsetX = 0f
     private var offsetY = 0f
     private var modelScale = 1f
+    private var presentationScale = 1f
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
     private var pinching = false
     private var moved = false
+    private var pendingAction: String? = null
 
     var statusChanged: ((String?) -> Unit)? = null
     var interactionChanged: (() -> Unit)? = null
@@ -84,6 +86,19 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     fun currentTransform(): Live2DTransform = Live2DTransform(offsetX, offsetY, modelScale)
+
+    fun setPresentationScale(scale: Float) {
+        val next = scale.coerceIn(0.4f, 1f)
+        if (presentationScale == next) return
+        presentationScale = next
+        applyTransform()
+    }
+
+    fun playAction(tag: String) {
+        if (tag.isBlank()) return
+        pendingAction = tag
+        dispatchPendingAction()
+    }
 
     fun setRenderOptions(fpsLimit: Int, vsyncEnabled: Boolean) {
         val nextFpsLimit = fpsLimit.coerceIn(15, 120)
@@ -184,6 +199,7 @@ class Live2DRenderView @JvmOverloads constructor(
                             else -> I18n.t("status_model_load_failed")
                         },
                     )
+                    if (accepted) dispatchPendingAction()
                 }
                     .onFailure { statusChanged?.invoke(it.message ?: I18n.t("status_resource_failed")) }
             }
@@ -281,6 +297,13 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     private fun applyTransform() {
-        if (handle != 0L) NativeLive2D.setTransform(handle, offsetX, offsetY, modelScale)
+        if (handle != 0L) NativeLive2D.setTransform(handle, offsetX, offsetY, modelScale * presentationScale)
+    }
+
+    private fun dispatchPendingAction() {
+        val action = pendingAction ?: return
+        if (handle == 0L) return
+        pendingAction = null
+        NativeLive2D.playAction(handle, action)
     }
 }

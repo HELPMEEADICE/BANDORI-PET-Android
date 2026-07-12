@@ -35,6 +35,7 @@ object NativeLive2D {
     external fun setBackgroundPixels(handle: Long, pixels: IntArray?, width: Int, height: Int)
     external fun touch(handle: Long, x: Float, y: Float)
     external fun lookAt(handle: Long, x: Float, y: Float)
+    external fun playAction(handle: Long, tag: String)
     external fun lastError(handle: Long): String
     external fun destroy(handle: Long)
 

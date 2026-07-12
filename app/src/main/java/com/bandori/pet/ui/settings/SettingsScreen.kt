@@ -4,6 +4,7 @@ import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,11 +18,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,6 +37,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -45,6 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.bandori.pet.DarkModeSetting
 import com.bandori.pet.FloatingLive2DItem
@@ -57,6 +70,9 @@ import com.bandori.pet.addFloatingLive2DItem
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.floating.FloatingLive2DOverlayService
 import com.bandori.pet.isWallpaperEnabled
+import com.bandori.pet.llm.ChatHistoryRepository
+import com.bandori.pet.llm.LlmSettings
+import com.bandori.pet.llm.ThinkingMode
 import com.bandori.pet.loadWallpaperBackgroundUri
 import com.bandori.pet.persistBackgroundUri
 import com.bandori.pet.removeFloatingLive2DItem
@@ -79,6 +95,14 @@ fun SettingsScreen(
     var wallpaperEnabled by remember { mutableStateOf(isWallpaperEnabled(appContext)) }
     var wallpaperBackgroundUri by remember { mutableStateOf(loadWallpaperBackgroundUri(appContext)) }
     var floatingOverlaySettings by remember { mutableStateOf(FloatingOverlaySettings.load(appContext)) }
+    var destination by remember { mutableStateOf(SettingsDestination.Root) }
+
+    BackHandler(enabled = destination != SettingsDestination.Root) { destination = SettingsDestination.Root }
+
+    if (destination == SettingsDestination.Llm) {
+        LlmSettingsScreen(onBack = { destination = SettingsDestination.Root })
+        return
+    }
 
     fun updateFloatingOverlaySettings(settings: FloatingOverlaySettings) {
         val latestItemsById = FloatingOverlaySettings.load(appContext).items.associateBy { it.id }
@@ -116,6 +140,7 @@ fun SettingsScreen(
                 FloatingLive2DOverlayService.sync(appContext)
             },
         )
+        LlmSettingsEntryCard(onClick = { destination = SettingsDestination.Llm })
         FloatingOverlaySettingsCard(
             selectedModel = selectedModel,
             settings = floatingOverlaySettings,
@@ -143,6 +168,181 @@ fun SettingsScreen(
             I18n.t("settings_about_text"),
         )
     }
+}
+
+private enum class SettingsDestination { Root, Llm }
+
+@Composable
+private fun LlmSettingsEntryCard(onClick: () -> Unit) {
+    val context = LocalContext.current
+    val settings = LlmSettings.load(context.applicationContext)
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(I18n.t("settings_llm_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    if (settings.isConfigured) I18n.t("settings_llm_configured", settings.model) else I18n.t("settings_llm_not_configured"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+private fun LlmSettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val appContext = context.applicationContext
+    var draft by remember { mutableStateOf(LlmSettings.load(appContext)) }
+    var apiKeyVisible by remember { mutableStateOf(false) }
+    var thinkingMenuExpanded by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
+    var confirmClearAll by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, contentDescription = I18n.t("back")) }
+            Column {
+                Text(I18n.t("settings_llm_title"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(I18n.t("settings_llm_desc"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                OutlinedTextField(
+                    value = draft.baseUrl,
+                    onValueChange = { draft = draft.copy(baseUrl = it); saved = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(I18n.t("settings_llm_base_url")) },
+                    supportingText = { Text(I18n.t("settings_llm_http_warning")) },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = draft.apiKey,
+                    onValueChange = { draft = draft.copy(apiKey = it); saved = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(I18n.t("settings_llm_api_key")) },
+                    visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
+                            Icon(
+                                if (apiKeyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = null,
+                            )
+                        }
+                    },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = draft.model,
+                    onValueChange = { draft = draft.copy(model = it); saved = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(I18n.t("settings_llm_model")) },
+                    singleLine = true,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(I18n.t("settings_llm_thinking"), fontWeight = FontWeight.SemiBold)
+                        Text(thinkingModeLabel(draft.thinkingMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Box {
+                        TextButton(onClick = { thinkingMenuExpanded = true }) { Text(thinkingModeLabel(draft.thinkingMode)) }
+                        DropdownMenu(
+                            expanded = thinkingMenuExpanded,
+                            onDismissRequest = { thinkingMenuExpanded = false },
+                        ) {
+                            ThinkingMode.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(thinkingModeLabel(mode)) },
+                                    onClick = {
+                                        draft = draft.copy(thinkingMode = mode)
+                                        saved = false
+                                        thinkingMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                Column {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(I18n.t("settings_llm_temperature"), fontWeight = FontWeight.SemiBold)
+                        Text(String.format("%.1f", draft.temperature), color = MaterialTheme.colorScheme.primary)
+                    }
+                    Slider(
+                        value = draft.temperature,
+                        onValueChange = { draft = draft.copy(temperature = (it * 10).roundToInt() / 10f); saved = false },
+                        valueRange = 0f..2f,
+                        steps = 19,
+                    )
+                }
+                OutlinedTextField(
+                    value = draft.maxTokens.toString(),
+                    onValueChange = { value ->
+                        value.filter(Char::isDigit).toIntOrNull()?.let {
+                            draft = draft.copy(maxTokens = it.coerceIn(1, 32_768))
+                            saved = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(I18n.t("settings_llm_max_tokens")) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = draft.baseUrl.trim().let { it.startsWith("http://") || it.startsWith("https://") } &&
+                        draft.apiKey.isNotBlank() && draft.model.isNotBlank(),
+                    onClick = {
+                        draft = draft.normalized()
+                        draft.save(appContext)
+                        saved = true
+                    },
+                ) { Text(if (saved) I18n.t("settings_llm_saved") else I18n.t("settings_llm_save")) }
+                TextButton(modifier = Modifier.fillMaxWidth(), onClick = { confirmClearAll = true }) {
+                    Text(I18n.t("settings_llm_clear_all"))
+                }
+            }
+        }
+    }
+
+    if (confirmClearAll) {
+        AlertDialog(
+            onDismissRequest = { confirmClearAll = false },
+            title = { Text(I18n.t("settings_llm_clear_all")) },
+            text = { Text(I18n.t("settings_llm_clear_all_confirm")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    ChatHistoryRepository(appContext).clearAll()
+                    confirmClearAll = false
+                }) { Text(I18n.t("confirm")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmClearAll = false }) { Text(I18n.t("cancel")) } },
+        )
+    }
+}
+
+private fun thinkingModeLabel(mode: ThinkingMode): String = when (mode) {
+    ThinkingMode.Auto -> I18n.t("settings_llm_thinking_auto")
+    ThinkingMode.Enabled -> I18n.t("settings_llm_thinking_on")
+    ThinkingMode.Disabled -> I18n.t("settings_llm_thinking_off")
 }
 
 @Composable

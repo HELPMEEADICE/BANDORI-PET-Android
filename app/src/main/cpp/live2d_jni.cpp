@@ -81,6 +81,7 @@ struct Renderer {
     lua_State* lua = nullptr;
     std::string runtimeRoot;
     std::string pendingModel;
+    std::string pendingAction;
     std::unordered_map<std::string, std::string> pendingResources;
     bool pendingBackground = false;
     int pendingBackgroundWidth = 0;
@@ -1118,6 +1119,21 @@ function __bp_touch(x_ratio, y_ratio)
     end
 end
 
+function __bp_action(tag)
+    if not renderer then return false end
+    tag = string.lower(tostring(tag or "")):gsub("^%[", ""):gsub("%]$", "")
+    if tag == "" then return false end
+    if ends_with(tag, ".exp") and renderer.set_expression then
+        local ok = pcall(function() renderer:set_expression(tag) end)
+        if ok then return true end
+        local name = tag:sub(1, -5)
+        return pcall(function() renderer:set_expression(name) end)
+    end
+    local candidates = candidates_for_tags({ tag })
+    if try_start_from_candidates(candidates, "llm:" .. tag) then return true end
+    return false
+end
+
 function __bp_look_at(x_ratio, y_ratio)
     if not renderer or renderer.drag == nil then return end
     x_ratio = clamp01(x_ratio)
@@ -1168,6 +1184,7 @@ static void renderLoop(Renderer* renderer) {
         );
         previousFrameStart = frameStart;
         std::string model;
+        std::string action;
         std::unordered_map<std::string, std::string> resources;
         std::vector<uint32_t> backgroundPixels;
         int backgroundWidth = 0;
@@ -1187,6 +1204,7 @@ static void renderLoop(Renderer* renderer) {
         {
             std::lock_guard<std::mutex> lock(renderer->mutex);
             model.swap(renderer->pendingModel);
+            action.swap(renderer->pendingAction);
             resources.swap(renderer->pendingResources);
             if (renderer->pendingBackground) {
                 shouldUpdateBackground = true;
@@ -1227,6 +1245,11 @@ static void renderLoop(Renderer* renderer) {
             renderer->luaApi.pushNumber(renderer->lua, touchXRatio);
             renderer->luaApi.pushNumber(renderer->lua, touchYRatio);
             callLua(renderer, "__bp_touch", 2);
+        }
+        if (!action.empty()) {
+            getGlobal(renderer, "__bp_action");
+            renderer->luaApi.pushString(renderer->lua, action.c_str());
+            callLua(renderer, "__bp_action", 1);
         }
         if (shouldLookAt) {
             renderer->lookAtActive = true;
@@ -1471,6 +1494,18 @@ Java_com_bandori_pet_live2d_NativeLive2D_lookAt(JNIEnv*, jobject, jlong handle, 
     renderer->lookAtXRatio.store(std::clamp(static_cast<float>(xRatio), 0.0f, 1.0f));
     renderer->lookAtYRatio.store(std::clamp(static_cast<float>(yRatio), 0.0f, 1.0f));
     renderer->pendingLookAt.store(true);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_playAction(JNIEnv* env, jobject, jlong handle, jstring tag) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr || tag == nullptr) return;
+    const char* tagChars = env->GetStringUTFChars(tag, nullptr);
+    {
+        std::lock_guard<std::mutex> lock(renderer->mutex);
+        renderer->pendingAction = tagChars != nullptr ? tagChars : "";
+    }
+    if (tagChars != nullptr) env->ReleaseStringUTFChars(tag, tagChars);
 }
 
 extern "C" JNIEXPORT jstring JNICALL

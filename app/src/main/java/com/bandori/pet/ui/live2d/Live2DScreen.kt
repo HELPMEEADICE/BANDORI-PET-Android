@@ -1,6 +1,7 @@
 package com.bandori.pet.ui.live2d
 
 import android.net.Uri
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -43,14 +44,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bandori.pet.I18n
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.Live2DControlIcon
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.live2d.Live2DRenderView
+import com.bandori.pet.llm.Live2DChatViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import android.graphics.BitmapFactory
 
@@ -66,6 +70,8 @@ fun Live2DScreen(
     var locked by remember(selectedModel) { mutableStateOf(true) }
     var controlsVisible by remember(selectedModel) { mutableStateOf(true) }
     var controlPulse by remember(selectedModel) { mutableStateOf(0) }
+    var chatExpanded by remember(selectedModel) { mutableStateOf(false) }
+    val chatViewModel: Live2DChatViewModel = viewModel()
 
     fun revealControls() {
         controlsVisible = true
@@ -87,6 +93,8 @@ fun Live2DScreen(
             locked = locked,
             controlsVisible = controlsVisible,
             fullScreen = true,
+            chatExpanded = chatExpanded,
+            chatViewModel = chatViewModel,
             cornerRadius = 0.dp,
             onStatusChanged = { status = it },
             onInteraction = { revealControls() },
@@ -98,6 +106,7 @@ fun Live2DScreen(
                 onFullScreenChanged(it)
                 revealControls()
             },
+            onChatExpandedChange = { chatExpanded = it },
             modifier = modifier,
         )
     } else {
@@ -113,6 +122,8 @@ fun Live2DScreen(
                 locked = locked,
                 controlsVisible = controlsVisible,
                 fullScreen = false,
+                chatExpanded = chatExpanded,
+                chatViewModel = chatViewModel,
                 cornerRadius = 26.dp,
                 onStatusChanged = { status = it },
                 onInteraction = { revealControls() },
@@ -124,6 +135,7 @@ fun Live2DScreen(
                     onFullScreenChanged(it)
                     revealControls()
                 },
+                onChatExpandedChange = { chatExpanded = it },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(14.dp),
@@ -140,14 +152,29 @@ fun Live2DStage(
     locked: Boolean,
     controlsVisible: Boolean,
     fullScreen: Boolean,
+    chatExpanded: Boolean,
+    chatViewModel: Live2DChatViewModel,
     cornerRadius: Dp,
     onStatusChanged: (String?) -> Unit,
     onInteraction: () -> Unit,
     onLockedChange: (Boolean) -> Unit,
     onFullScreenChanged: (Boolean) -> Unit,
+    onChatExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(cornerRadius)
+    var renderView by remember(selectedModel) { mutableStateOf<Live2DRenderView?>(null) }
+    val presentationScale by animateFloatAsState(
+        targetValue = if (chatExpanded) 0.72f else 1f,
+        label = "chatPresentationScale",
+    )
+    LaunchedEffect(selectedModel?.characterId) {
+        selectedModel?.let(chatViewModel::selectCharacter)
+        if (selectedModel == null) onChatExpandedChange(false)
+    }
+    LaunchedEffect(renderView, chatViewModel) {
+        chatViewModel.actions.collect { action -> renderView?.playAction(action) }
+    }
     Box(
         modifier = modifier
             .clip(shape)
@@ -174,6 +201,7 @@ fun Live2DStage(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
                     Live2DRenderView(context).apply {
+                        renderView = this
                         statusChanged = onStatusChanged
                         interactionChanged = onInteraction
                         setInteractionLocked(locked)
@@ -181,6 +209,7 @@ fun Live2DStage(
                         setRenderResolution(renderSettings.renderResolution)
                         setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                         setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
+                        setPresentationScale(presentationScale)
                         setModel(selectedModel)
                     }
                 },
@@ -192,15 +221,22 @@ fun Live2DStage(
                     view.setRenderResolution(renderSettings.renderResolution)
                     view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                     view.setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
+                    view.setPresentationScale(presentationScale)
                     view.setModel(selectedModel)
+                    renderView = view
                 },
             )
         }
         status?.let {
             Surface(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(18.dp),
+                    .align(if (chatExpanded) Alignment.TopCenter else Alignment.BottomCenter)
+                    .padding(
+                        start = 18.dp,
+                        top = if (chatExpanded) 18.dp else 0.dp,
+                        end = 18.dp,
+                        bottom = if (chatExpanded) 0.dp else 82.dp,
+                    ),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
                 shape = RoundedCornerShape(18.dp),
                 tonalElevation = 6.dp,
@@ -213,7 +249,7 @@ fun Live2DStage(
             }
         }
         AnimatedVisibility(
-            visible = controlsVisible && selectedModel != null,
+            visible = controlsVisible && selectedModel != null && !chatExpanded,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.matchParentSize(),
@@ -234,6 +270,18 @@ fun Live2DStage(
                     onClick = { onFullScreenChanged(!fullScreen) },
                 )
             }
+        }
+        selectedModel?.let { model ->
+            Live2DChatOverlay(
+                model = model,
+                viewModel = chatViewModel,
+                expanded = chatExpanded,
+                onExpandedChange = {
+                    onChatExpandedChange(it)
+                    onInteraction()
+                },
+                modifier = Modifier.matchParentSize(),
+            )
         }
     }
 }
