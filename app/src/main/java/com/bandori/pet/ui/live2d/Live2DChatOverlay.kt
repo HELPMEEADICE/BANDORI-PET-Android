@@ -87,11 +87,11 @@ fun Live2DChatOverlay(
 
         if (!expanded) {
             Surface(
+                onClick = { onExpandedChange(true) },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 18.dp)
-                    .size(52.dp)
-                    .clickable { onExpandedChange(true) },
+                    .size(52.dp),
                 shape = RoundedCornerShape(26.dp),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                 tonalElevation = 8.dp,
