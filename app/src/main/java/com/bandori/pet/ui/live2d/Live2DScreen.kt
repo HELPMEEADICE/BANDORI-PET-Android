@@ -281,6 +281,7 @@ fun Live2DStage(
                 model = model,
                 viewModel = chatViewModel,
                 expanded = chatExpanded,
+                launcherVisible = controlsVisible,
                 onExpandedChange = {
                     onChatExpandedChange(it)
                     onInteraction()

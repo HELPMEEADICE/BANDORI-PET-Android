@@ -2,6 +2,9 @@ package com.bandori.pet.ui.live2d
 
 import android.graphics.Rect
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -74,6 +77,7 @@ fun Live2DChatOverlay(
     model: ModelChoice,
     viewModel: Live2DChatViewModel,
     expanded: Boolean,
+    launcherVisible: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -109,30 +113,37 @@ fun Live2DChatOverlay(
 
         if (!expanded) {
             val interactionSource = remember { MutableInteractionSource() }
-            Surface(
+            AnimatedVisibility(
+                visible = launcherVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 18.dp)
-                    .size(52.dp),
-                shape = RoundedCornerShape(26.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                tonalElevation = 8.dp,
-                shadowElevation = 10.dp,
+                    .padding(bottom = 18.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(26.dp))
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null,
-                        ) { onExpandedChange(true) },
-                    contentAlignment = Alignment.Center,
+                Surface(
+                    modifier = Modifier.size(52.dp),
+                    shape = RoundedCornerShape(26.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 8.dp,
+                    shadowElevation = 10.dp,
                 ) {
-                    Icon(
-                        Icons.Outlined.ChatBubbleOutline,
-                        contentDescription = I18n.t("chat_open", model.characterName),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(26.dp))
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null,
+                            ) { onExpandedChange(true) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Outlined.ChatBubbleOutline,
+                            contentDescription = I18n.t("chat_open", model.characterName),
+                        )
+                    }
                 }
             }
         } else {
@@ -164,6 +175,7 @@ fun Live2DChatOverlay(
                         ) {},
                     shape = RoundedCornerShape(28.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                     tonalElevation = 12.dp,
                     shadowElevation = 16.dp,
                 ) {
