@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -87,7 +88,6 @@ fun Live2DChatOverlay(
 
         if (!expanded) {
             Surface(
-                onClick = { onExpandedChange(true) },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 18.dp)
@@ -97,7 +97,13 @@ fun Live2DChatOverlay(
                 tonalElevation = 8.dp,
                 shadowElevation = 10.dp,
             ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(26.dp))
+                        .clickable { onExpandedChange(true) },
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
                         Icons.Outlined.ChatBubbleOutline,
                         contentDescription = I18n.t("chat_open", model.characterName),
