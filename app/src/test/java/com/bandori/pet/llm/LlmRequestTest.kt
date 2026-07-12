@@ -17,6 +17,18 @@ class LlmRequestTest {
     }
 
     @Test
+    fun customPromptIsAppendedToSystemContext() {
+        assertEquals(
+            "character prompt\n\nAlways answer briefly.",
+            LlmSettings(customPrompt = "  Always answer briefly.\n").systemPromptWithCustom("character prompt"),
+        )
+        assertEquals(
+            "character prompt",
+            LlmSettings(customPrompt = "  \n").systemPromptWithCustom("character prompt"),
+        )
+    }
+
+    @Test
     fun thinkingModesUseDeepSeekExtensionOnlyWhenExplicit() {
         val client = LlmChatClient()
         val base = LlmSettings(apiKey = "secret")

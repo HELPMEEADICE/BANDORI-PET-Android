@@ -284,6 +284,16 @@ private fun LlmSettingsScreen(onBack: () -> Unit) {
                     label = { Text(I18n.t("settings_llm_model")) },
                     singleLine = true,
                 )
+                OutlinedTextField(
+                    value = draft.customPrompt,
+                    onValueChange = { draft = draft.copy(customPrompt = it); saved = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(I18n.t("settings_llm_custom_prompt")) },
+                    supportingText = { Text(I18n.t("settings_llm_custom_prompt_desc")) },
+                    placeholder = { Text(I18n.t("settings_llm_custom_prompt_hint")) },
+                    minLines = 4,
+                    maxLines = 10,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

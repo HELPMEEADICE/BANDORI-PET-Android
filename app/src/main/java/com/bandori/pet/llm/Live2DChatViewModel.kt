@@ -111,7 +111,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             )
             lastFailedInput = null
             try {
-                client.streamCompletion(settings, characterPrompt.text, messages).collect { event ->
+                client.streamCompletion(settings, settings.systemPromptWithCustom(characterPrompt.text), messages).collect { event ->
                     when (event) {
                         is LlmStreamEvent.Content -> mutableState.value = mutableState.value.copy(
                             streamingText = parser.consume(event.text),

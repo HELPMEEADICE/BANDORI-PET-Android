@@ -18,6 +18,7 @@ data class LlmSettings(
     val baseUrl: String = "",
     val apiKey: String = "",
     val model: String = "",
+    val customPrompt: String = "",
     val thinkingMode: ThinkingMode = ThinkingMode.Auto,
     val temperature: Float = 0.8f,
     val maxTokens: Int = 1024,
@@ -29,6 +30,7 @@ data class LlmSettings(
         baseUrl = baseUrl.trim(),
         apiKey = apiKey.trim(),
         model = model.trim(),
+        customPrompt = customPrompt.trim(),
         temperature = temperature.coerceIn(0f, 2f),
         maxTokens = maxTokens.coerceIn(1, 32_768),
     )
@@ -44,6 +46,7 @@ data class LlmSettings(
             .putString(KEY_LLM_BASE_URL, value.baseUrl)
             .putString(KEY_LLM_API_KEY, value.apiKey)
             .putString(KEY_LLM_MODEL, value.model)
+            .putString(KEY_LLM_CUSTOM_PROMPT, value.customPrompt)
             .putString(KEY_LLM_THINKING_MODE, value.thinkingMode.value)
             .putFloat(KEY_LLM_TEMPERATURE, value.temperature)
             .putInt(KEY_LLM_MAX_TOKENS, value.maxTokens)
@@ -57,12 +60,18 @@ data class LlmSettings(
                 baseUrl = prefs.getString(KEY_LLM_BASE_URL, null).orEmpty(),
                 apiKey = prefs.getString(KEY_LLM_API_KEY, null).orEmpty(),
                 model = prefs.getString(KEY_LLM_MODEL, null).orEmpty(),
+                customPrompt = prefs.getString(KEY_LLM_CUSTOM_PROMPT, null).orEmpty(),
                 thinkingMode = ThinkingMode.fromValue(prefs.getString(KEY_LLM_THINKING_MODE, null)),
                 temperature = prefs.getFloat(KEY_LLM_TEMPERATURE, 0.8f).coerceIn(0f, 2f),
                 maxTokens = prefs.getInt(KEY_LLM_MAX_TOKENS, 1024).coerceIn(1, 32_768),
             )
         }
     }
+
+    fun systemPromptWithCustom(basePrompt: String): String = listOfNotNull(
+        basePrompt.trim().takeIf(String::isNotEmpty),
+        customPrompt.trim().takeIf(String::isNotEmpty),
+    ).joinToString("\n\n")
 }
 
 data class ChatMessage(
@@ -80,6 +89,7 @@ sealed interface LlmStreamEvent {
 private const val KEY_LLM_BASE_URL = "llm_base_url"
 private const val KEY_LLM_API_KEY = "llm_api_key"
 private const val KEY_LLM_MODEL = "llm_model"
+private const val KEY_LLM_CUSTOM_PROMPT = "llm_custom_prompt"
 private const val KEY_LLM_THINKING_MODE = "llm_thinking_mode"
 private const val KEY_LLM_TEMPERATURE = "llm_temperature"
 private const val KEY_LLM_MAX_TOKENS = "llm_max_tokens"
