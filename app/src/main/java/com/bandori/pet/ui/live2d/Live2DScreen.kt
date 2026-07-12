@@ -168,6 +168,10 @@ fun Live2DStage(
         targetValue = if (chatExpanded) 0.72f else 1f,
         label = "chatPresentationScale",
     )
+    val presentationOffsetY by animateFloatAsState(
+        targetValue = if (chatExpanded) 0.18f else 0f,
+        label = "chatPresentationOffsetY",
+    )
     LaunchedEffect(selectedModel?.characterId) {
         selectedModel?.let(chatViewModel::selectCharacter)
         if (selectedModel == null) onChatExpandedChange(false)
@@ -210,6 +214,7 @@ fun Live2DStage(
                         setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                         setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
                         setPresentationScale(presentationScale)
+                        setPresentationOffsetY(presentationOffsetY)
                         setModel(selectedModel)
                     }
                 },
@@ -222,6 +227,7 @@ fun Live2DStage(
                     view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                     view.setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
                     view.setPresentationScale(presentationScale)
+                    view.setPresentationOffsetY(presentationOffsetY)
                     view.setModel(selectedModel)
                     renderView = view
                 },

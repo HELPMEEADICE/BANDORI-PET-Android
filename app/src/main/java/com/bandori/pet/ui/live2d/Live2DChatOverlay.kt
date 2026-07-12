@@ -4,13 +4,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -76,28 +80,28 @@ fun Live2DChatOverlay(
 
     LaunchedEffect(model.characterId, expanded) { viewModel.selectCharacter(model, force = expanded) }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
+        val compactForIme = imeHeight > 0.dp && maxHeight - imeHeight < 380.dp
+
         if (!expanded) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 18.dp)
-                    .width(240.dp)
-                    .height(52.dp)
+                    .size(52.dp)
                     .clickable { onExpandedChange(true) },
                 shape = RoundedCornerShape(26.dp),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                 tonalElevation = 8.dp,
                 shadowElevation = 10.dp,
             ) {
-                Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
-                    Spacer(Modifier.width(10.dp))
-                    Text(I18n.t("chat_open", model.characterName), fontWeight = FontWeight.SemiBold)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Outlined.ChatBubbleOutline,
+                        contentDescription = I18n.t("chat_open", model.characterName),
+                    )
                 }
             }
         } else {
@@ -107,114 +111,128 @@ fun Live2DChatOverlay(
                     .background(Color.Black.copy(alpha = 0.12f))
                     .clickable { onExpandedChange(false) },
             )
-            Surface(
+            Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .fillMaxWidth(0.92f)
-                    .fillMaxHeight(0.60f)
-                    .widthIn(max = 560.dp)
-                    .heightIn(max = 620.dp)
-                    .imePadding()
-                    .clickable {},
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f),
-                tonalElevation = 12.dp,
-                shadowElevation = 16.dp,
+                    .fillMaxSize()
+                    .imePadding(),
             ) {
-                Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                        .fillMaxWidth(0.92f)
+                        .then(if (compactForIme) Modifier else Modifier.fillMaxHeight(0.60f))
+                        .widthIn(max = 560.dp)
+                        .heightIn(max = 620.dp)
+                        .clickable {},
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f),
+                    tonalElevation = 12.dp,
+                    shadowElevation = 16.dp,
+                ) {
+                    Column(
+                        Modifier
+                            .then(if (compactForIme) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
+                            .padding(if (compactForIme) 12.dp else 16.dp),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(model.characterName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(
-                                settings.model.ifBlank { I18n.t("chat_not_configured_short") },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        IconButton(onClick = { confirmClear = true }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = I18n.t("chat_clear"))
-                        }
-                        IconButton(onClick = { onExpandedChange(false) }) {
-                            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = I18n.t("chat_minimize"))
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    if (!settings.isConfigured) {
-                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text(
-                                I18n.t("chat_not_configured"),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    } else {
-                        ChatMessageList(
-                            messages = state.messages,
-                            streamingText = state.streamingText,
-                            thinking = state.isThinking,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                        )
-                        state.error?.let { error ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                shape = RoundedCornerShape(14.dp),
+                        if (!compactForIme) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(model.characterName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                     Text(
-                                        if (error == "LLM_NOT_CONFIGURED") I18n.t("chat_not_configured") else error,
-                                        modifier = Modifier.weight(1f),
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        settings.model.ifBlank { I18n.t("chat_not_configured_short") },
                                         style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    IconButton(onClick = { viewModel.retry(model) }) {
-                                        Icon(Icons.Outlined.Refresh, contentDescription = I18n.t("chat_retry"))
+                                }
+                                IconButton(onClick = { confirmClear = true }) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = I18n.t("chat_clear"))
+                                }
+                                IconButton(onClick = { onExpandedChange(false) }) {
+                                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = I18n.t("chat_minimize"))
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        if (!settings.isConfigured) {
+                            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    I18n.t("chat_not_configured"),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            if (!compactForIme) {
+                                ChatMessageList(
+                                    messages = state.messages,
+                                    streamingText = state.streamingText,
+                                    thinking = state.isThinking,
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                )
+                                state.error?.let { error ->
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer,
+                                        shape = RoundedCornerShape(14.dp),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                if (error == "LLM_NOT_CONFIGURED") I18n.t("chat_not_configured") else error,
+                                                modifier = Modifier.weight(1f),
+                                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                            IconButton(onClick = { viewModel.retry(model) }) {
+                                                Icon(Icons.Outlined.Refresh, contentDescription = I18n.t("chat_retry"))
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Bottom,
-                        ) {
-                            OutlinedTextField(
-                                value = input,
-                                onValueChange = { input = it },
-                                modifier = Modifier.weight(1f),
-                                placeholder = { Text(I18n.t("chat_input_hint")) },
-                                maxLines = 4,
-                                enabled = !state.isGenerating,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                keyboardActions = KeyboardActions(onSend = {
-                                    if (input.isNotBlank()) {
-                                        viewModel.send(model, input)
-                                        input = ""
-                                    }
-                                }),
-                                shape = RoundedCornerShape(22.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            FilledIconButton(
-                                onClick = {
-                                    if (state.isGenerating) {
-                                        viewModel.stop()
-                                    } else if (input.isNotBlank()) {
-                                        viewModel.send(model, input)
-                                        input = ""
-                                    }
-                                },
-                                enabled = state.isGenerating || input.isNotBlank(),
-                                modifier = Modifier.size(48.dp),
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
                             ) {
-                                Icon(
-                                    if (state.isGenerating) Icons.Outlined.Stop else Icons.Outlined.Send,
-                                    contentDescription = I18n.t(if (state.isGenerating) "chat_stop" else "chat_send"),
+                                OutlinedTextField(
+                                    value = input,
+                                    onValueChange = { input = it },
+                                    modifier = Modifier.weight(1f),
+                                    placeholder = { Text(I18n.t("chat_input_hint")) },
+                                    maxLines = if (compactForIme) 1 else 4,
+                                    enabled = !state.isGenerating,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                    keyboardActions = KeyboardActions(onSend = {
+                                        if (input.isNotBlank()) {
+                                            viewModel.send(model, input)
+                                            input = ""
+                                        }
+                                    }),
+                                    shape = RoundedCornerShape(22.dp),
                                 )
+                                Spacer(Modifier.width(8.dp))
+                                FilledIconButton(
+                                    onClick = {
+                                        if (state.isGenerating) {
+                                            viewModel.stop()
+                                        } else if (input.isNotBlank()) {
+                                            viewModel.send(model, input)
+                                            input = ""
+                                        }
+                                    },
+                                    enabled = state.isGenerating || input.isNotBlank(),
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        if (state.isGenerating) Icons.Outlined.Stop else Icons.Outlined.Send,
+                                        contentDescription = I18n.t(if (state.isGenerating) "chat_stop" else "chat_send"),
+                                    )
+                                }
                             }
                         }
                     }

@@ -45,6 +45,7 @@ class Live2DRenderView @JvmOverloads constructor(
     private var offsetY = 0f
     private var modelScale = 1f
     private var presentationScale = 1f
+    private var presentationOffsetY = 0f
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
@@ -91,6 +92,13 @@ class Live2DRenderView @JvmOverloads constructor(
         val next = scale.coerceIn(0.4f, 1f)
         if (presentationScale == next) return
         presentationScale = next
+        applyTransform()
+    }
+
+    fun setPresentationOffsetY(offsetY: Float) {
+        val next = offsetY.coerceIn(-1f, 1f)
+        if (presentationOffsetY == next) return
+        presentationOffsetY = next
         applyTransform()
     }
 
@@ -297,7 +305,9 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     private fun applyTransform() {
-        if (handle != 0L) NativeLive2D.setTransform(handle, offsetX, offsetY, modelScale * presentationScale)
+        if (handle != 0L) {
+            NativeLive2D.setTransform(handle, offsetX, offsetY + presentationOffsetY, modelScale * presentationScale)
+        }
     }
 
     private fun dispatchPendingAction() {
