@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -79,12 +78,12 @@ fun Live2DChatOverlay(
 
     LaunchedEffect(model.characterId, expanded) { viewModel.selectCharacter(model, force = expanded) }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
-        // Both activities use adjustResize, so maxHeight is already the area above the IME.
-        // Subtracting the IME height (or applying imePadding) would move the input twice.
-        val compactForIme = imeHeight > 0.dp && maxHeight < 380.dp
+        // Both activities use adjustResize, so this root already ends above the IME.
+        // Keep the compact input-only design while avoiding a second IME offset.
+        val compactForIme = imeHeight > 0.dp
 
         if (!expanded) {
             Surface(
