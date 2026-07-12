@@ -11,14 +11,14 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -36,12 +36,12 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     private val prompts = CharacterPromptRepository(application)
     private val client = LlmChatClient()
     private val mutableState = MutableStateFlow(ChatUiState())
-    private val mutableActions = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    private val mutableActions = Channel<String>(Channel.BUFFERED)
     private var requestJob: Job? = null
     private var lastFailedInput: String? = null
 
     val state: StateFlow<ChatUiState> = mutableState.asStateFlow()
-    val actions: SharedFlow<String> = mutableActions.asSharedFlow()
+    val actions: Flow<String> = mutableActions.receiveAsFlow()
 
     fun selectCharacter(model: ModelChoice, force: Boolean = false) {
         if (!force && mutableState.value.characterId == model.characterId) return
@@ -152,7 +152,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             priorMessages
         }
         withContext(Dispatchers.IO) { history.save(characterId, finalMessages) }
-        result.action?.let { mutableActions.emit(it) }
+        result.action?.let { mutableActions.send(it) }
         mutableState.value = ChatUiState(characterId = characterId, messages = finalMessages)
     }
 
