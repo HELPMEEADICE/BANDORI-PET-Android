@@ -169,7 +169,7 @@ fun Live2DStage(
         label = "chatPresentationScale",
     )
     val presentationOffsetY by animateFloatAsState(
-        targetValue = if (chatExpanded) 0.18f else 0f,
+        targetValue = if (chatExpanded) 0.36f else 0f,
         label = "chatPresentationOffsetY",
     )
     LaunchedEffect(selectedModel?.characterId) {
