@@ -136,11 +136,16 @@ fun Live2DChatOverlay(
                 }
             }
         } else {
+            val dismissInteractionSource = remember { MutableInteractionSource() }
+            val panelInteractionSource = remember { MutableInteractionSource() }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.12f))
-                    .clickable { onExpandedChange(false) },
+                    .clickable(
+                        interactionSource = dismissInteractionSource,
+                        indication = null,
+                    ) { onExpandedChange(false) },
             )
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -153,7 +158,10 @@ fun Live2DChatOverlay(
                         .then(if (compactForIme) Modifier else Modifier.fillMaxHeight(0.60f))
                         .widthIn(max = 560.dp)
                         .heightIn(max = 620.dp)
-                        .clickable {},
+                        .clickable(
+                            interactionSource = panelInteractionSource,
+                            indication = null,
+                        ) {},
                     shape = RoundedCornerShape(28.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f),
                     tonalElevation = 12.dp,
