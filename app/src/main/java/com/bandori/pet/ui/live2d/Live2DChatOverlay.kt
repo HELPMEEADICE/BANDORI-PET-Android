@@ -1,5 +1,8 @@
 package com.bandori.pet.ui.live2d
 
+import android.os.Build
+import android.view.WindowManager
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +54,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -76,15 +81,33 @@ fun Live2DChatOverlay(
     val settings = remember(expanded) { LlmSettings.load(context.applicationContext) }
     var input by remember(model.characterId) { mutableStateOf("") }
     var confirmClear by remember { mutableStateOf(false) }
+    var overlayBottomInWindowPx by remember { mutableStateOf(0f) }
 
     LaunchedEffect(model.characterId, expanded) { viewModel.selectCharacter(model, force = expanded) }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coordinates ->
+                overlayBottomInWindowPx = coordinates.boundsInWindow().bottom
+            },
+    ) {
         val density = LocalDensity.current
-        val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
-        // Both activities use adjustResize, so this root already ends above the IME.
-        // Keep the compact input-only design while avoiding a second IME offset.
-        val compactForIme = imeHeight > 0.dp
+        val imeHeightPx = WindowInsets.ime.getBottom(density)
+        val windowHeightPx = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.height()
+        } else {
+            context.resources.displayMetrics.heightPixels
+        }
+        val imeOverlap = with(density) {
+            calculateImeOverlapPx(
+                containerBottomPx = overlayBottomInWindowPx,
+                windowHeightPx = windowHeightPx,
+                imeHeightPx = imeHeightPx,
+            ).toDp()
+        }
+        // Keep the compact input-only design whenever the keyboard is visible.
+        val compactForIme = imeHeightPx > 0
 
         if (!expanded) {
             Surface(
@@ -123,7 +146,7 @@ fun Live2DChatOverlay(
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp + imeOverlap)
                         .fillMaxWidth(0.92f)
                         .then(if (compactForIme) Modifier else Modifier.fillMaxHeight(0.60f))
                         .widthIn(max = 560.dp)
@@ -259,6 +282,16 @@ fun Live2DChatOverlay(
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(I18n.t("cancel")) } },
         )
     }
+}
+
+private fun calculateImeOverlapPx(
+    containerBottomPx: Float,
+    windowHeightPx: Int,
+    imeHeightPx: Int,
+): Float {
+    if (imeHeightPx <= 0 || containerBottomPx <= 0f) return 0f
+    val imeTopPx = windowHeightPx - imeHeightPx
+    return (containerBottomPx - imeTopPx).coerceIn(0f, imeHeightPx.toFloat())
 }
 
 @Composable
