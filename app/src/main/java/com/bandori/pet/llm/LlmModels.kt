@@ -15,9 +15,9 @@ enum class ThinkingMode(val value: String) {
 }
 
 data class LlmSettings(
-    val baseUrl: String = "https://api.deepseek.com",
+    val baseUrl: String = "",
     val apiKey: String = "",
-    val model: String = "deepseek-v4-flash",
+    val model: String = "",
     val thinkingMode: ThinkingMode = ThinkingMode.Auto,
     val temperature: Float = 0.8f,
     val maxTokens: Int = 1024,
@@ -54,9 +54,9 @@ data class LlmSettings(
         fun load(context: Context): LlmSettings {
             val prefs = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
             return LlmSettings(
-                baseUrl = prefs.getString(KEY_LLM_BASE_URL, null) ?: "https://api.deepseek.com",
+                baseUrl = prefs.getString(KEY_LLM_BASE_URL, null).orEmpty(),
                 apiKey = prefs.getString(KEY_LLM_API_KEY, null).orEmpty(),
-                model = prefs.getString(KEY_LLM_MODEL, null) ?: "deepseek-v4-flash",
+                model = prefs.getString(KEY_LLM_MODEL, null).orEmpty(),
                 thinkingMode = ThinkingMode.fromValue(prefs.getString(KEY_LLM_THINKING_MODE, null)),
                 temperature = prefs.getFloat(KEY_LLM_TEMPERATURE, 0.8f).coerceIn(0f, 2f),
                 maxTokens = prefs.getInt(KEY_LLM_MAX_TOKENS, 1024).coerceIn(1, 32_768),

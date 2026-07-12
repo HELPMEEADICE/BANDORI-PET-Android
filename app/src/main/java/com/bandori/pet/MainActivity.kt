@@ -106,6 +106,7 @@ fun BandoriPetApp(
     val appContext = context.applicationContext
     var appData by remember { mutableStateOf<AppData?>(null) }
     var selectedScreen by remember { mutableStateOf(Screen.Live2D) }
+    var settingsSubpageVisible by remember { mutableStateOf(false) }
     var selectedBandId by remember { mutableStateOf<String?>(null) }
     var selectedCharacterId by remember { mutableStateOf(loadSelectedCharacterId(appContext)) }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
@@ -157,18 +158,21 @@ fun BandoriPetApp(
                 CircularProgressIndicator()
             }
         } else {
+            val showAppChrome = selectedScreen != Screen.Settings || !settingsSubpageVisible
             Scaffold(
                 bottomBar = {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                        Screen.entries.forEach { screen ->
-                            NavigationBarItem(
-                                selected = selectedScreen == screen,
-                                onClick = {
-                                    selectedScreen = screen
-                                },
-                                icon = { NavIcon(screen) },
-                                label = { Text(screen.title(), fontWeight = FontWeight.Bold) },
-                            )
+                    if (showAppChrome) {
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                            Screen.entries.forEach { screen ->
+                                NavigationBarItem(
+                                    selected = selectedScreen == screen,
+                                    onClick = {
+                                        selectedScreen = screen
+                                    },
+                                    icon = { NavIcon(screen) },
+                                    label = { Text(screen.title(), fontWeight = FontWeight.Bold) },
+                                )
+                            }
                         }
                     }
                 },
@@ -179,8 +183,10 @@ fun BandoriPetApp(
                         .padding(padding)
                         .padding(horizontal = 18.dp, vertical = 14.dp),
                 ) {
-                    Header(selectedModel)
-                    Spacer(Modifier.height(12.dp))
+                    if (showAppChrome) {
+                        Header(selectedModel)
+                        Spacer(Modifier.height(12.dp))
+                    }
                     AnimatedContent(targetState = selectedScreen, label = "screen") { screen ->
                         when (screen) {
                             Screen.Live2D -> Live2DScreen(
@@ -225,6 +231,7 @@ fun BandoriPetApp(
                                 onThemeSettingsChanged = onThemeSettingsChanged,
                                 renderSettings = renderSettings,
                                 onRenderSettingsChanged = updateRenderSettings,
+                                onSubpageVisibilityChanged = { settingsSubpageVisible = it },
                             )
                         }
                     }

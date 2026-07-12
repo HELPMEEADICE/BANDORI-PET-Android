@@ -4,7 +4,8 @@ import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,6 +82,7 @@ import com.bandori.pet.resetFloatingLive2DItemPositions
 import com.bandori.pet.saveWallpaperBackgroundUri
 import com.bandori.pet.setWallpaperEnabled
 import com.bandori.pet.wallpaper.Live2DWallpaperService
+import kotlinx.coroutines.CancellationException
 import kotlin.math.roundToInt
 
 @Composable
@@ -89,6 +92,7 @@ fun SettingsScreen(
     onThemeSettingsChanged: (ThemeSettings) -> Unit,
     renderSettings: RenderSettings,
     onRenderSettingsChanged: (RenderSettings) -> Unit,
+    onSubpageVisibilityChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -97,10 +101,13 @@ fun SettingsScreen(
     var floatingOverlaySettings by remember { mutableStateOf(FloatingOverlaySettings.load(appContext)) }
     var destination by remember { mutableStateOf(SettingsDestination.Root) }
 
-    BackHandler(enabled = destination != SettingsDestination.Root) { destination = SettingsDestination.Root }
+    fun openRootSettings() {
+        destination = SettingsDestination.Root
+        onSubpageVisibilityChanged(false)
+    }
 
     if (destination == SettingsDestination.Llm) {
-        LlmSettingsScreen(onBack = { destination = SettingsDestination.Root })
+        LlmSettingsScreen(onBack = ::openRootSettings)
         return
     }
 
@@ -140,7 +147,10 @@ fun SettingsScreen(
                 FloatingLive2DOverlayService.sync(appContext)
             },
         )
-        LlmSettingsEntryCard(onClick = { destination = SettingsDestination.Llm })
+        LlmSettingsEntryCard(onClick = {
+            destination = SettingsDestination.Llm
+            onSubpageVisibilityChanged(true)
+        })
         FloatingOverlaySettingsCard(
             selectedModel = selectedModel,
             settings = floatingOverlaySettings,
@@ -208,9 +218,30 @@ private fun LlmSettingsScreen(onBack: () -> Unit) {
     var thinkingMenuExpanded by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var confirmClearAll by remember { mutableStateOf(false) }
+    var predictiveBackProgress by remember { mutableStateOf(0f) }
+    var predictiveBackEdge by remember { mutableStateOf(BackEventCompat.EDGE_LEFT) }
+
+    PredictiveBackHandler {
+        try {
+            progress.collect { backEvent ->
+                predictiveBackProgress = backEvent.progress
+                predictiveBackEdge = backEvent.swipeEdge
+            }
+            onBack()
+        } catch (_: CancellationException) {
+            predictiveBackProgress = 0f
+        }
+    }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val direction = if (predictiveBackEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+                translationX = size.width * 0.16f * predictiveBackProgress * direction
+                alpha = 1f - 0.12f * predictiveBackProgress
+            }
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
