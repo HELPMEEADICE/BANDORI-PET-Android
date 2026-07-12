@@ -1,10 +1,10 @@
 package com.bandori.pet.ui.live2d
 
-import android.os.Build
-import android.view.WindowManager
+import android.graphics.Rect
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,10 +54,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -78,10 +79,11 @@ fun Live2DChatOverlay(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val hostView = LocalView.current
     val settings = remember(expanded) { LlmSettings.load(context.applicationContext) }
     var input by remember(model.characterId) { mutableStateOf("") }
     var confirmClear by remember { mutableStateOf(false) }
-    var overlayBottomInWindowPx by remember { mutableStateOf(0f) }
+    var overlayBottomOnScreenPx by remember { mutableStateOf(0f) }
 
     LaunchedEffect(model.characterId, expanded) { viewModel.selectCharacter(model, force = expanded) }
 
@@ -89,20 +91,16 @@ fun Live2DChatOverlay(
         modifier = modifier
             .fillMaxSize()
             .onGloballyPositioned { coordinates ->
-                overlayBottomInWindowPx = coordinates.boundsInWindow().bottom
+                overlayBottomOnScreenPx = coordinates.positionOnScreen().y + coordinates.size.height
             },
     ) {
         val density = LocalDensity.current
         val imeHeightPx = WindowInsets.ime.getBottom(density)
-        val windowHeightPx = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.height()
-        } else {
-            context.resources.displayMetrics.heightPixels
-        }
+        val visibleWindowFrame = Rect().also(hostView::getWindowVisibleDisplayFrame)
         val imeOverlap = with(density) {
             calculateImeOverlapPx(
-                containerBottomPx = overlayBottomInWindowPx,
-                windowHeightPx = windowHeightPx,
+                containerBottomOnScreenPx = overlayBottomOnScreenPx,
+                imeTopOnScreenPx = visibleWindowFrame.bottom,
                 imeHeightPx = imeHeightPx,
             ).toDp()
         }
@@ -110,6 +108,7 @@ fun Live2DChatOverlay(
         val compactForIme = imeHeightPx > 0
 
         if (!expanded) {
+            val interactionSource = remember { MutableInteractionSource() }
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -124,7 +123,10 @@ fun Live2DChatOverlay(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(RoundedCornerShape(26.dp))
-                        .clickable { onExpandedChange(true) },
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) { onExpandedChange(true) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -285,13 +287,12 @@ fun Live2DChatOverlay(
 }
 
 private fun calculateImeOverlapPx(
-    containerBottomPx: Float,
-    windowHeightPx: Int,
+    containerBottomOnScreenPx: Float,
+    imeTopOnScreenPx: Int,
     imeHeightPx: Int,
 ): Float {
-    if (imeHeightPx <= 0 || containerBottomPx <= 0f) return 0f
-    val imeTopPx = windowHeightPx - imeHeightPx
-    return (containerBottomPx - imeTopPx).coerceIn(0f, imeHeightPx.toFloat())
+    if (imeHeightPx <= 0 || containerBottomOnScreenPx <= 0f) return 0f
+    return (containerBottomOnScreenPx - imeTopOnScreenPx).coerceIn(0f, imeHeightPx.toFloat())
 }
 
 @Composable
