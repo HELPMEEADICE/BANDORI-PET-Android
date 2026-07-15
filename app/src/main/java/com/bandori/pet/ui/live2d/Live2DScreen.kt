@@ -1,7 +1,9 @@
 package com.bandori.pet.ui.live2d
 
 import android.net.Uri
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -165,10 +167,12 @@ fun Live2DStage(
     var renderView by remember(selectedModel) { mutableStateOf<Live2DRenderView?>(null) }
     val presentationScale by animateFloatAsState(
         targetValue = if (chatExpanded) 0.72f else 1f,
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
         label = "chatPresentationScale",
     )
     val presentationOffsetY by animateFloatAsState(
         targetValue = if (chatExpanded) 0.36f else 0f,
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
         label = "chatPresentationOffsetY",
     )
     LaunchedEffect(selectedModel?.characterId) {
@@ -212,8 +216,7 @@ fun Live2DStage(
                         setRenderResolution(renderSettings.renderResolution)
                         setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                         setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
-                        setPresentationScale(presentationScale)
-                        setPresentationOffsetY(presentationOffsetY)
+                        setPresentationTransform(presentationScale, presentationOffsetY)
                         setModel(selectedModel)
                     }
                 },
@@ -225,10 +228,14 @@ fun Live2DStage(
                     view.setRenderResolution(renderSettings.renderResolution)
                     view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
                     view.setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
-                    view.setPresentationScale(presentationScale)
-                    view.setPresentationOffsetY(presentationOffsetY)
+                    view.setPresentationTransform(presentationScale, presentationOffsetY)
                     view.setModel(selectedModel)
                     renderView = view
+                },
+                onReset = null,
+                onRelease = { view ->
+                    if (renderView === view) renderView = null
+                    view.release()
                 },
             )
         }

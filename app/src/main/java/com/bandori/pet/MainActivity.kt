@@ -5,6 +5,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +50,9 @@ import com.bandori.pet.ui.model.ModelScreen
 import com.bandori.pet.ui.settings.SettingsScreen
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,6 +121,8 @@ fun BandoriPetApp(
     var modelAssetsVersion by remember { mutableStateOf(0) }
     var renderSettings by remember { mutableStateOf(RenderSettings.load(appContext)) }
     val repository = remember { DataRepository(appContext) }
+    val scope = rememberCoroutineScope()
+    val modelSelectionGeneration = remember { AtomicInteger(0) }
     val updateRenderSettings: (RenderSettings) -> Unit = { settings ->
         renderSettings = settings
         settings.save(appContext)
@@ -123,6 +132,22 @@ fun BandoriPetApp(
         selectedModel = model
         preferredModelAssetPath = model?.modelAssetPath
         saveModelSelection(appContext, characterId, model)
+    }
+    val selectCharacter: (String) -> Unit = selectCharacter@{ characterId ->
+        if (selectedCharacterId == characterId && selectedModel?.characterId == characterId) return@selectCharacter
+        selectedCharacterId = characterId
+        selectedModel = null
+        preferredModelAssetPath = null
+        val character = appData?.characters?.get(characterId)
+        val generation = modelSelectionGeneration.incrementAndGet()
+        scope.launch {
+            val model = withContext(Dispatchers.IO) {
+                character?.let(repository::availableModels)?.firstOrNull()
+            }
+            if (generation == modelSelectionGeneration.get() && selectedCharacterId == characterId) {
+                selectCharacterModel(characterId, model)
+            }
+        }
     }
 
     LaunchedEffect(modelAssetsVersion) {
@@ -187,7 +212,14 @@ fun BandoriPetApp(
                         Header(selectedModel)
                         Spacer(Modifier.height(12.dp))
                     }
-                    AnimatedContent(targetState = selectedScreen, label = "screen") { screen ->
+                    AnimatedContent(
+                        targetState = selectedScreen,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(160)) togetherWith
+                                fadeOut(animationSpec = tween(120))
+                        },
+                        label = "screen",
+                    ) { screen ->
                         when (screen) {
                             Screen.Live2D -> Live2DScreen(
                                 selectedModel = selectedModel,
@@ -208,18 +240,16 @@ fun BandoriPetApp(
                                 onBandSelected = { band ->
                                     selectedBandId = band.id
                                     band.characters.firstOrNull()?.let { characterId ->
-                                        val model = data.characters[characterId]
-                                            ?.let { repository.availableModels(it).firstOrNull() }
-                                        selectCharacterModel(characterId, model)
+                                        selectCharacter(characterId)
                                     }
                                 },
                                 onCharacterSelected = { character ->
-                                    selectCharacterModel(
-                                        character.id,
-                                        repository.availableModels(character).firstOrNull(),
-                                    )
+                                    selectCharacter(character.id)
                                 },
-                                onModelSelected = { selectCharacterModel(it.characterId, it) },
+                                onModelSelected = {
+                                    modelSelectionGeneration.incrementAndGet()
+                                    selectCharacterModel(it.characterId, it)
+                                },
                                 onModelAssetsChanged = {
                                     modelAssetsVersion += 1
                                     DataRepository.invalidateCache()

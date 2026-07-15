@@ -52,6 +52,13 @@ class Live2DRenderView @JvmOverloads constructor(
     private var pinching = false
     private var moved = false
     private var pendingAction: String? = null
+    private var interactiveTransformScheduled = false
+
+    private val applyInteractiveTransform = Runnable {
+        interactiveTransformScheduled = false
+        applyTransform()
+        transformChanged?.invoke(currentTransform())
+    }
 
     var statusChanged: ((String?) -> Unit)? = null
     var interactionChanged: (() -> Unit)? = null
@@ -69,7 +76,10 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     fun setModel(model: ModelChoice?) {
-        if (selectedModel == model && handle != 0L && !loading) return
+        if (selectedModel == model) {
+            if (model != null && handle == 0L && !loading) loadSelectedModel()
+            return
+        }
         selectedModel = model
         loadGeneration += 1
         loadSelectedModel()
@@ -80,25 +90,22 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     fun setTransform(transform: Live2DTransform) {
+        val nextScale = transform.scale.coerceIn(0.4f, 3f)
+        if (offsetX == transform.offsetX && offsetY == transform.offsetY && modelScale == nextScale) return
         offsetX = transform.offsetX
         offsetY = transform.offsetY
-        modelScale = transform.scale.coerceIn(0.4f, 3f)
+        modelScale = nextScale
         applyTransform()
     }
 
     fun currentTransform(): Live2DTransform = Live2DTransform(offsetX, offsetY, modelScale)
 
-    fun setPresentationScale(scale: Float) {
-        val next = scale.coerceIn(0.4f, 1f)
-        if (presentationScale == next) return
-        presentationScale = next
-        applyTransform()
-    }
-
-    fun setPresentationOffsetY(offsetY: Float) {
-        val next = offsetY.coerceIn(-1f, 1f)
-        if (presentationOffsetY == next) return
-        presentationOffsetY = next
+    fun setPresentationTransform(scale: Float, offsetY: Float) {
+        val nextScale = scale.coerceIn(0.4f, 1f)
+        val nextOffsetY = offsetY.coerceIn(-1f, 1f)
+        if (presentationScale == nextScale && presentationOffsetY == nextOffsetY) return
+        presentationScale = nextScale
+        presentationOffsetY = nextOffsetY
         applyTransform()
     }
 
@@ -145,6 +152,7 @@ class Live2DRenderView @JvmOverloads constructor(
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+        cancelInteractiveTransform()
         destroyRenderer()
         renderSurface?.release()
         renderSurface = null
@@ -153,6 +161,7 @@ class Live2DRenderView @JvmOverloads constructor(
 
     fun release() {
         surfaceTextureListener = null
+        cancelInteractiveTransform()
         destroyRenderer()
         renderSurface?.release()
         renderSurface = null
@@ -247,8 +256,7 @@ class Live2DRenderView @JvmOverloads constructor(
                         val nextScale = (modelScale * (span / lastSpan)).coerceIn(0.4f, 3f)
                         if (nextScale != modelScale) {
                             modelScale = nextScale
-                            applyTransform()
-                            transformChanged?.invoke(currentTransform())
+                            scheduleInteractiveTransform()
                             moved = true
                         }
                     }
@@ -260,8 +268,7 @@ class Live2DRenderView @JvmOverloads constructor(
                         val base = max(1f, min(width.toFloat(), height.toFloat()))
                         offsetX += dx * 2f / base
                         offsetY -= dy * 2f / base
-                        applyTransform()
-                        transformChanged?.invoke(currentTransform())
+                        scheduleInteractiveTransform()
                         moved = true
                     }
                     lastX = event.x
@@ -302,6 +309,17 @@ class Live2DRenderView @JvmOverloads constructor(
     private fun pointerSpan(event: MotionEvent): Float {
         if (event.pointerCount < 2) return 0f
         return hypot(event.getX(0) - event.getX(1), event.getY(0) - event.getY(1))
+    }
+
+    private fun scheduleInteractiveTransform() {
+        if (interactiveTransformScheduled) return
+        interactiveTransformScheduled = true
+        postOnAnimation(applyInteractiveTransform)
+    }
+
+    private fun cancelInteractiveTransform() {
+        removeCallbacks(applyInteractiveTransform)
+        interactiveTransformScheduled = false
     }
 
     private fun applyTransform() {

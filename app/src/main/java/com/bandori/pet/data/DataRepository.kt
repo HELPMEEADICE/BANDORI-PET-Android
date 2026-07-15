@@ -8,9 +8,12 @@ class DataRepository(private val context: Context) {
     companion object {
         @Volatile
         private var cachedAppData: AppData? = null
+        private val modelCacheLock = Any()
+        private val cachedModels = mutableMapOf<String, List<ModelChoice>>()
 
         fun invalidateCache() {
             cachedAppData = null
+            synchronized(modelCacheLock) { cachedModels.clear() }
         }
     }
 
@@ -101,7 +104,8 @@ class DataRepository(private val context: Context) {
         context.assets.open(path).use { true }
     }.getOrDefault(false) || ZstModelArchive.assetExists(context, path)
 
-    fun availableModels(character: CharacterInfo): List<ModelChoice> {
+    fun availableModels(character: CharacterInfo): List<ModelChoice> = synchronized(modelCacheLock) {
+        cachedModels[character.id]?.let { return@synchronized it }
         val costumeChoices = if (character.costumes.isEmpty()) {
             linkedMapOf("live_default" to I18n.t("model_default_costume"))
         } else {
@@ -117,7 +121,7 @@ class DataRepository(private val context: Context) {
             }
         }
 
-        return costumeChoices.mapNotNull { (costumeId, costumeName) ->
+        costumeChoices.mapNotNull { (costumeId, costumeName) ->
             val base = "$characterBase/$costumeId"
             val modelJson = findModelJson(base)
             val model3Json = findModel3Json(base)
@@ -135,7 +139,7 @@ class DataRepository(private val context: Context) {
                     modelAssetPath = it,
                 )
             }
-        }
+        }.also { cachedModels[character.id] = it }
     }
 
     private fun findModelJson(base: String): String? = runCatching {

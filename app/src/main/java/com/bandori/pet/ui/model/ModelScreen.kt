@@ -90,15 +90,26 @@ fun ModelScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val repository = remember(data) { DataRepository(context) }
+    val repository = remember(data) { DataRepository(context.applicationContext) }
     val selectedBand = data.bands.firstOrNull { it.id == selectedBandId } ?: data.bands.first()
     val characters = selectedBand.characters.mapNotNull { id -> data.characters[id] }
     val selectedCharacter = data.characters[selectedCharacterId]
-    val availableModels = remember(selectedCharacter, modelAssetsVersion) {
-        selectedCharacter?.let { repository.availableModels(it) }.orEmpty()
-    }
+    var availableModels by remember(selectedCharacter?.id, modelAssetsVersion) { mutableStateOf(emptyList<ModelChoice>()) }
+    var modelsLoading by remember(selectedCharacter?.id, modelAssetsVersion) { mutableStateOf(selectedCharacter != null) }
     var modelTransfer by remember { mutableStateOf<ModelTransferState?>(null) }
     var downloadMessage by remember(selectedCharacter?.id) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedCharacter?.id, modelAssetsVersion) {
+        val character = selectedCharacter
+        if (character == null) {
+            availableModels = emptyList()
+            modelsLoading = false
+        } else {
+            modelsLoading = true
+            availableModels = withContext(Dispatchers.IO) { repository.availableModels(character) }
+            modelsLoading = false
+        }
+    }
 
     fun startCharacterModelTransfer(
         character: CharacterInfo,
@@ -278,7 +289,11 @@ fun ModelScreen(
                 .fillMaxWidth()
                 .weight(0.9f),
         ) {
-            if (availableModels.isEmpty()) {
+            if (modelsLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (availableModels.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     ModelDownloadPrompt(
                         character = selectedCharacter,
