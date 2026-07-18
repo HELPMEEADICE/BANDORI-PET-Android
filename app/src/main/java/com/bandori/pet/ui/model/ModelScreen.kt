@@ -71,6 +71,7 @@ import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.ui.formatTransferProgress
 import com.bandori.pet.ui.formatTransferSpeed
+import com.bandori.pet.ui.ImageBitmapCache
 import com.bandori.pet.ui.isMoc3
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,8 +92,12 @@ fun ModelScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(data) { DataRepository(context.applicationContext) }
-    val selectedBand = data.bands.firstOrNull { it.id == selectedBandId } ?: data.bands.first()
-    val characters = selectedBand.characters.mapNotNull { id -> data.characters[id] }
+    val selectedBand = remember(data, selectedBandId) {
+        data.bands.firstOrNull { it.id == selectedBandId } ?: data.bands.first()
+    }
+    val characters = remember(data, selectedBand.id) {
+        selectedBand.characters.mapNotNull { id -> data.characters[id] }
+    }
     val selectedCharacter = data.characters[selectedCharacterId]
     var availableModels by remember(selectedCharacter?.id, modelAssetsVersion) { mutableStateOf(emptyList<ModelChoice>()) }
     var modelsLoading by remember(selectedCharacter?.id, modelAssetsVersion) { mutableStateOf(selectedCharacter != null) }
@@ -594,8 +599,10 @@ fun TextCard(
 fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, contentScale: ContentScale, placeholderText: String? = null) {
     val context = LocalContext.current
     val appContext = context.applicationContext
-    var bitmap by remember(path, reloadKey) { mutableStateOf<ImageBitmap?>(null) }
+    val cacheKey = path?.let { "asset:$reloadKey:$it" }
+    var bitmap by remember(cacheKey) { mutableStateOf(cacheKey?.let(ImageBitmapCache::get)) }
     LaunchedEffect(path, reloadKey) {
+        if (bitmap != null) return@LaunchedEffect
         bitmap = path?.let {
             withContext(Dispatchers.IO) {
                 runCatching {
@@ -603,7 +610,7 @@ fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, contentSca
                 }.getOrNull() ?: ZstModelArchive.readLogicalPath(appContext, it)
                     ?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
             }
-        }
+        }?.also { decoded -> cacheKey?.let { ImageBitmapCache.put(it, decoded) } }
     }
     if (bitmap != null) {
         androidx.compose.foundation.Image(bitmap = bitmap!!, contentDescription = null, modifier = modifier, contentScale = contentScale)

@@ -93,7 +93,7 @@ fun Live2DChatOverlay(
     val context = LocalContext.current
     val hostView = LocalView.current
     val focusManager = LocalFocusManager.current
-    val settings = remember(expanded) { LlmSettings.load(context.applicationContext) }
+    val settings = remember { LlmSettings.load(context.applicationContext) }
     val input = remember(model.characterId) { mutableStateOf("") }
     var confirmClear by remember { mutableStateOf(false) }
     var overlayBottomOnScreenPx by remember { mutableStateOf(0f) }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -47,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -130,53 +132,64 @@ fun SettingsScreen(
         FloatingLive2DOverlayService.sync(appContext)
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ThemeSettingsCard(
-            settings = themeSettings,
-            onSettingsChanged = onThemeSettingsChanged,
-        )
-        RenderSettingsCard(
-            settings = renderSettings,
-            onSettingsChanged = { settings ->
-                onRenderSettingsChanged(settings)
-                FloatingLive2DOverlayService.sync(appContext)
-            },
-        )
-        LlmSettingsEntryCard(onClick = {
-            destination = SettingsDestination.Llm
-            onSubpageVisibilityChanged(true)
-        })
-        FloatingOverlaySettingsCard(
-            selectedModel = selectedModel,
-            settings = floatingOverlaySettings,
-            onSettingsChanged = ::updateFloatingOverlaySettings,
-            onRefreshSettings = { floatingOverlaySettings = FloatingOverlaySettings.load(appContext) },
-        )
-        WallpaperSettingsCard(
-            enabled = wallpaperEnabled,
-            backgroundUri = wallpaperBackgroundUri,
-            onEnabledChanged = { enabled ->
-                wallpaperEnabled = enabled
-                setWallpaperEnabled(appContext, enabled)
-                if (enabled) openLiveWallpaperPicker(context)
-            },
-            onBackgroundChanged = { uri ->
-                wallpaperBackgroundUri = uri
-                saveWallpaperBackgroundUri(appContext, uri)
-            },
-            onAdjustPosition = {
-                context.startActivity(Intent(context, com.bandori.pet.WallpaperAdjustActivity::class.java))
-            },
-        )
-        InfoCard(
-            I18n.t("settings_about"),
-            I18n.t("settings_about_text"),
-        )
+        item(key = "theme") {
+            ThemeSettingsCard(
+                settings = themeSettings,
+                onSettingsChanged = onThemeSettingsChanged,
+            )
+        }
+        item(key = "render") {
+            RenderSettingsCard(
+                settings = renderSettings,
+                onSettingsChanged = { settings ->
+                    onRenderSettingsChanged(settings)
+                    FloatingLive2DOverlayService.sync(appContext)
+                },
+            )
+        }
+        item(key = "llm") {
+            LlmSettingsEntryCard(onClick = {
+                destination = SettingsDestination.Llm
+                onSubpageVisibilityChanged(true)
+            })
+        }
+        item(key = "floating") {
+            FloatingOverlaySettingsCard(
+                selectedModel = selectedModel,
+                settings = floatingOverlaySettings,
+                onSettingsChanged = ::updateFloatingOverlaySettings,
+                onRefreshSettings = { floatingOverlaySettings = FloatingOverlaySettings.load(appContext) },
+            )
+        }
+        item(key = "wallpaper") {
+            WallpaperSettingsCard(
+                enabled = wallpaperEnabled,
+                backgroundUri = wallpaperBackgroundUri,
+                onEnabledChanged = { enabled ->
+                    wallpaperEnabled = enabled
+                    setWallpaperEnabled(appContext, enabled)
+                    if (enabled) openLiveWallpaperPicker(context)
+                },
+                onBackgroundChanged = { uri ->
+                    wallpaperBackgroundUri = uri
+                    saveWallpaperBackgroundUri(appContext, uri)
+                },
+                onAdjustPosition = {
+                    context.startActivity(Intent(context, com.bandori.pet.WallpaperAdjustActivity::class.java))
+                },
+            )
+        }
+        item(key = "info") {
+            InfoCard(
+                I18n.t("settings_about"),
+                I18n.t("settings_about_text"),
+            )
+        }
     }
 }
 
@@ -185,7 +198,7 @@ private enum class SettingsDestination { Root, Llm }
 @Composable
 private fun LlmSettingsEntryCard(onClick: () -> Unit) {
     val context = LocalContext.current
-    val settings = LlmSettings.load(context.applicationContext)
+    val settings = remember { LlmSettings.load(context.applicationContext) }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp),
@@ -468,6 +481,10 @@ private fun RenderSettingsCard(
     onSettingsChanged: (RenderSettings) -> Unit,
 ) {
     val context = LocalContext.current
+    var fpsLimit by remember(settings.fpsLimit) { mutableFloatStateOf(settings.fpsLimit.toFloat()) }
+    var renderResolutionIndex by remember(settings.renderResolution) {
+        mutableFloatStateOf(settings.renderResolution.ordinal.toFloat())
+    }
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         persistBackgroundUri(context.applicationContext, uri)
@@ -492,16 +509,19 @@ private fun RenderSettingsCard(
                 ) {
                     Text(I18n.t("settings_fps_limit"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        "${settings.fpsLimit} FPS",
+                        "${fpsLimit.roundToInt()} FPS",
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                     )
                 }
                 Slider(
-                    value = settings.fpsLimit.toFloat(),
+                    value = fpsLimit,
                     onValueChange = { value ->
-                        val fps = (value / 5f).roundToInt().coerceIn(3, 24) * 5
-                        onSettingsChanged(settings.copy(fpsLimit = fps))
+                        fpsLimit = ((value / 5f).roundToInt().coerceIn(3, 24) * 5).toFloat()
+                    },
+                    onValueChangeFinished = {
+                        val fps = fpsLimit.roundToInt()
+                        if (fps != settings.fpsLimit) onSettingsChanged(settings.copy(fpsLimit = fps))
                     },
                     valueRange = 15f..120f,
                     steps = 20,
@@ -515,18 +535,23 @@ private fun RenderSettingsCard(
                 ) {
                     Text(I18n.t("settings_render_resolution"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        renderResolutionLabel(settings.renderResolution),
+                        renderResolutionLabel(RenderResolution.entries[renderResolutionIndex.roundToInt()]),
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                     )
                 }
                 Slider(
-                    value = settings.renderResolution.ordinal.toFloat(),
+                    value = renderResolutionIndex,
                     onValueChange = { value ->
-                        val resolution = RenderResolution.entries[
-                            value.roundToInt().coerceIn(RenderResolution.entries.indices),
-                        ]
-                        onSettingsChanged(settings.copy(renderResolution = resolution))
+                        renderResolutionIndex = value.roundToInt()
+                            .coerceIn(RenderResolution.entries.indices)
+                            .toFloat()
+                    },
+                    onValueChangeFinished = {
+                        val resolution = RenderResolution.entries[renderResolutionIndex.roundToInt()]
+                        if (resolution != settings.renderResolution) {
+                            onSettingsChanged(settings.copy(renderResolution = resolution))
+                        }
                     },
                     valueRange = 0f..RenderResolution.entries.lastIndex.toFloat(),
                     steps = RenderResolution.entries.size - 2,

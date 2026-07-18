@@ -53,6 +53,7 @@ import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.llm.Live2DChatViewModel
+import com.bandori.pet.ui.ImageBitmapCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
@@ -374,8 +375,10 @@ fun Live2DControlButton(
 fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale) {
     val context = LocalContext.current
     val appContext = context.applicationContext
-    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    val cacheKey = uri?.let { "content:$it" }
+    var bitmap by remember(cacheKey) { mutableStateOf(cacheKey?.let(ImageBitmapCache::get)) }
     LaunchedEffect(uri) {
+        if (bitmap != null) return@LaunchedEffect
         bitmap = uri?.let {
             withContext(Dispatchers.IO) {
                 runCatching {
@@ -384,7 +387,7 @@ fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale
                     }
                 }.getOrNull()
             }
-        }
+        }?.also { decoded -> cacheKey?.let { ImageBitmapCache.put(it, decoded) } }
     }
     if (bitmap != null) {
         androidx.compose.foundation.Image(bitmap = bitmap!!, contentDescription = null, modifier = modifier, contentScale = contentScale)
