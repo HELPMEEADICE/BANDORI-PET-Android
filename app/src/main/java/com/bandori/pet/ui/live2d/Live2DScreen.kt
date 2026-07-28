@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bandori.pet.I18n
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.Live2DControlIcon
@@ -283,6 +287,23 @@ private fun Live2DRenderer(
 
     LaunchedEffect(renderView, chatViewModel) {
         chatViewModel.actions.collect { action -> renderView?.playAction(action) }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, renderView) {
+        val lifecycle = lifecycleOwner.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> renderView?.setRenderingActive(true)
+                Lifecycle.Event.ON_STOP -> renderView?.setRenderingActive(false)
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        renderView?.setRenderingActive(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+        onDispose {
+            lifecycle.removeObserver(observer)
+        }
     }
 
     AndroidView(

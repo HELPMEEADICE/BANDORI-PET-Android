@@ -34,7 +34,9 @@ class Live2DRenderView @JvmOverloads constructor(
     private var renderSurface: Surface? = null
     private var runtimeRoot: String? = null
     private var selectedModel: ModelChoice? = null
+    private var loadedModel: ModelChoice? = null
     private var loading = false
+    private var renderingActive = true
     private var loadGeneration = 0
     private var interactionLocked = true
     private var fpsLimit = 60
@@ -125,6 +127,18 @@ class Live2DRenderView @JvmOverloads constructor(
         if (handle != 0L) NativeLive2D.setRenderOptions(handle, nextFpsLimit, vsyncEnabled)
     }
 
+    fun setRenderingActive(active: Boolean) {
+        if (renderingActive == active) return
+        renderingActive = active
+        if (active) {
+            if (handle != 0L) NativeLive2D.setPaused(handle, false)
+            if (handle == 0L || loadedModel != selectedModel) loadSelectedModel()
+        } else {
+            loadGeneration += 1
+            if (handle != 0L) NativeLive2D.setPaused(handle, true)
+        }
+    }
+
     fun setRenderResolution(resolution: RenderResolution) {
         if (renderResolution == resolution) return
         renderResolution = resolution
@@ -176,6 +190,7 @@ class Live2DRenderView @JvmOverloads constructor(
             NativeLive2D.destroy(handle)
             handle = 0L
         }
+        loadedModel = null
     }
 
     private fun updateSurfaceFrameRate() {
@@ -190,6 +205,7 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     private fun loadSelectedModel() {
+        if (!renderingActive) return
         val model = selectedModel ?: return
         val surface = renderSurface ?: return
         if (!surface.isValid || loading) return
@@ -203,6 +219,7 @@ class Live2DRenderView @JvmOverloads constructor(
                 result.onSuccess { prepared ->
                     if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
                         if (handle != 0L) NativeLive2D.destroy(handle)
+                        loadedModel = null
                         runtimeRoot = prepared.runtimeRoot
                         handle = NativeLive2D.create(
                             surface,
@@ -222,6 +239,7 @@ class Live2DRenderView @JvmOverloads constructor(
                         prepared.resourcePaths.toTypedArray(),
                         prepared.resourceBytes.toTypedArray(),
                     )
+                    if (accepted) loadedModel = model
                     val nativeError = if (handle != 0L) NativeLive2D.lastError(handle) else I18n.t("status_core_failed")
                     statusChanged?.invoke(
                         when {

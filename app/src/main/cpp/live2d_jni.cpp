@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -92,6 +93,9 @@ struct Renderer {
     std::mutex mutex;
     std::thread renderThread;
     std::atomic<bool> running{true};
+    std::atomic<bool> paused{false};
+    std::mutex pauseMutex;
+    std::condition_variable pauseCondition;
     std::atomic<bool> pendingResize{false};
     std::atomic<bool> pendingTouch{false};
     std::atomic<float> touchXRatio{0.5f};
@@ -1176,6 +1180,18 @@ static void renderLoop(Renderer* renderer) {
     int framesSinceFpsSample = 0;
     int measuredFps = 0;
     while (renderer->running.load()) {
+        if (renderer->paused.load()) {
+            std::unique_lock<std::mutex> lock(renderer->pauseMutex);
+            renderer->pauseCondition.wait(lock, [renderer] {
+                return !renderer->running.load() || !renderer->paused.load();
+            });
+            previousFrameStart = std::chrono::steady_clock::now();
+            fpsSampleStart = previousFrameStart;
+            framesSinceFpsSample = 0;
+            measuredFps = 0;
+            continue;
+        }
+
         const auto frameStart = std::chrono::steady_clock::now();
         const float deltaSeconds = std::clamp(
             std::chrono::duration<float>(frameStart - previousFrameStart).count(),
@@ -1418,6 +1434,14 @@ Java_com_bandori_pet_live2d_NativeLive2D_setRenderOptions(JNIEnv*, jobject, jlon
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_setPaused(JNIEnv*, jobject, jlong handle, jboolean paused) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+    renderer->paused.store(paused == JNI_TRUE);
+    if (paused != JNI_TRUE) renderer->pauseCondition.notify_all();
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_bandori_pet_live2d_NativeLive2D_setRenderScale(JNIEnv*, jobject, jlong handle, jfloat scale) {
     auto* renderer = reinterpret_cast<Renderer*>(handle);
     if (renderer == nullptr) return;
@@ -1521,6 +1545,7 @@ Java_com_bandori_pet_live2d_NativeLive2D_destroy(JNIEnv*, jobject, jlong handle)
     auto* renderer = reinterpret_cast<Renderer*>(handle);
     if (renderer == nullptr) return;
     renderer->running.store(false);
+    renderer->pauseCondition.notify_all();
     if (renderer->renderThread.joinable()) renderer->renderThread.join();
     cleanup(renderer);
     delete renderer;
