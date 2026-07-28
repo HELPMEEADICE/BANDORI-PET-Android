@@ -817,9 +817,10 @@ private fun FloatingOverlaySettingsCard(
                 FilledTonalButton(
                     enabled = selectedModel != null,
                     onClick = {
-                        val model = selectedModel ?: return@Button
-                        val next = addFloatingLive2DItem(appContext, model)
-                        onSettingsChanged(next)
+                        selectedModel?.let { model ->
+                            val next = addFloatingLive2DItem(appContext, model)
+                            onSettingsChanged(next)
+                        }
                     },
                 ) {
                     Text(I18n.t("settings_floating_add_btn"))
