@@ -121,7 +121,6 @@ fun BandoriPetApp(
     val appContext = context.applicationContext
     var appData by remember { mutableStateOf<AppData?>(null) }
     var selectedScreen by rememberSaveable { mutableStateOf(Screen.Live2D) }
-    var settingsSubpageVisible by remember { mutableStateOf(false) }
     var selectedBandId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedCharacterId by remember { mutableStateOf(loadSelectedCharacterId(appContext)) }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
@@ -191,35 +190,30 @@ fun BandoriPetApp(
                 CircularProgressIndicator()
             }
         } else {
-            val showAppChrome = selectedScreen != Screen.Settings || !settingsSubpageVisible
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
-                    if (showAppChrome) {
-                        AppTopBar(selectedModel = selectedModel)
-                    }
+                    AppTopBar(selectedModel = selectedModel)
                 },
                 bottomBar = {
-                    if (showAppChrome) {
-                        NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            tonalElevation = 0.dp,
-                        ) {
-                            Screen.entries.forEach { screen ->
-                                NavigationBarItem(
-                                    selected = selectedScreen == screen,
-                                    onClick = {
-                                        selectedScreen = screen
-                                    },
-                                    icon = { NavIcon(screen, selected = selectedScreen == screen) },
-                                    label = {
-                                        Text(
-                                            text = screen.title(),
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    },
-                                )
-                            }
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Screen.entries.forEach { screen ->
+                            NavigationBarItem(
+                                selected = selectedScreen == screen,
+                                onClick = {
+                                    selectedScreen = screen
+                                },
+                                icon = { NavIcon(screen, selected = selectedScreen == screen) },
+                                label = {
+                                    Text(
+                                        text = screen.title(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                },
+                            )
                         }
                     }
                 },
@@ -283,7 +277,6 @@ fun BandoriPetApp(
                                 onThemeSettingsChanged = onThemeSettingsChanged,
                                 renderSettings = renderSettings,
                                 onRenderSettingsChanged = updateRenderSettings,
-                                onSubpageVisibilityChanged = { settingsSubpageVisible = it },
                             )
                         }
                     }
