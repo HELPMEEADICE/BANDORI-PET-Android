@@ -75,7 +75,8 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
     val context = LocalContext.current
     val appContext = context.applicationContext
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
-    var transform by remember { mutableStateOf(loadWallpaperTransform(appContext)) }
+    val transform = remember { mutableStateOf(loadWallpaperTransform(appContext)) }
+    val renderSettings = remember { RenderSettings.load(appContext) }
     val backgroundUri = remember { loadWallpaperBackgroundUri(appContext) }
     var status by remember { mutableStateOf<String?>(null) }
 
@@ -119,25 +120,23 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 factory = { viewContext ->
                     Live2DRenderView(viewContext).apply {
                         statusChanged = { status = it }
-                        transformChanged = { transform = it }
+                        transformChanged = { transform.value = it }
                         setInteractionLocked(false)
-                        val renderSettings = RenderSettings.load(appContext)
                         setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
                         setRenderResolution(renderSettings.renderResolution)
                         setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
-                        setTransform(transform)
+                        setTransform(transform.value)
                         setModel(selectedModel)
                     }
                 },
                 update = { view ->
                     view.statusChanged = { status = it }
-                    view.transformChanged = { transform = it }
+                    view.transformChanged = { transform.value = it }
                     view.setInteractionLocked(false)
-                        val renderSettings = RenderSettings.load(appContext)
-                        view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
-                        view.setRenderResolution(renderSettings.renderResolution)
-                        view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
-                    view.setTransform(transform)
+                    view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                    view.setRenderResolution(renderSettings.renderResolution)
+                    view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
+                    view.setTransform(transform.value)
                     view.setModel(selectedModel)
                 },
             )
@@ -148,8 +147,10 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 .align(Alignment.TopCenter)
                 .padding(16.dp)
                 .fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+            shape = MaterialTheme.shapes.large,
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
+            ),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(I18n.t("wallpaper_adjust_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -175,9 +176,12 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+                .clip(MaterialTheme.shapes.large)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large),
+            shape = MaterialTheme.shapes.large,
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
+            ),
         ) {
             Row(
                 modifier = Modifier
@@ -189,7 +193,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 TextButton(
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        transform = Live2DTransform()
+                        transform.value = Live2DTransform()
                     },
                 ) {
                     Text(I18n.t("wallpaper_reset"))
@@ -201,7 +205,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                 Button(
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        saveWallpaperTransform(appContext, transform)
+                        saveWallpaperTransform(appContext, transform.value)
                         onClose()
                     },
                 ) {

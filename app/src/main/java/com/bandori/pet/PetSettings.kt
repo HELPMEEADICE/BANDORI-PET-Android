@@ -3,6 +3,7 @@ package com.bandori.pet
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import com.bandori.pet.data.DataRepository
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.live2d.Live2DTransform
@@ -49,6 +50,7 @@ enum class RenderResolution(val value: String, val scale: Float) {
     }
 }
 
+@Immutable
 data class FloatingLive2DItem(
     val id: String,
     val model: ModelChoice,
@@ -58,6 +60,7 @@ data class FloatingLive2DItem(
     val height: Int = DEFAULT_FLOATING_OVERLAY_HEIGHT,
 )
 
+@Immutable
 data class FloatingOverlaySettings(
     val enabled: Boolean = false,
     val locked: Boolean = true,
@@ -98,6 +101,7 @@ enum class DarkModeSetting(val value: String) {
     }
 }
 
+@Immutable
 data class ThemeSettings(
     val dynamicColorEnabled: Boolean = false,
     val darkMode: DarkModeSetting = DarkModeSetting.System,
@@ -127,6 +131,7 @@ fun DarkModeSetting.resolveDarkTheme(systemDark: Boolean): Boolean = when (this)
     DarkModeSetting.System -> systemDark
 }
 
+@Immutable
 data class RenderSettings(
     val fpsLimit: Int = 60,
     val fpsDisplayEnabled: Boolean = false,

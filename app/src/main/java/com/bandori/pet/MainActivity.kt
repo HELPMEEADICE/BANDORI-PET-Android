@@ -3,24 +3,30 @@ package com.bandori.pet
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ViewInAr
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -28,6 +34,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,10 +42,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bandori.pet.data.AppData
@@ -57,6 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val appContext = applicationContext
         I18n.init(appContext)
         setContent {
@@ -112,9 +120,9 @@ fun BandoriPetApp(
     val context = LocalContext.current
     val appContext = context.applicationContext
     var appData by remember { mutableStateOf<AppData?>(null) }
-    var selectedScreen by remember { mutableStateOf(Screen.Live2D) }
+    var selectedScreen by rememberSaveable { mutableStateOf(Screen.Live2D) }
     var settingsSubpageVisible by remember { mutableStateOf(false) }
-    var selectedBandId by remember { mutableStateOf<String?>(null) }
+    var selectedBandId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedCharacterId by remember { mutableStateOf(loadSelectedCharacterId(appContext)) }
     var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
     var preferredModelAssetPath by remember { mutableStateOf(loadSelectedModelAssetPath(appContext)) }
@@ -185,17 +193,31 @@ fun BandoriPetApp(
         } else {
             val showAppChrome = selectedScreen != Screen.Settings || !settingsSubpageVisible
             Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                topBar = {
+                    if (showAppChrome) {
+                        AppTopBar(selectedModel = selectedModel)
+                    }
+                },
                 bottomBar = {
                     if (showAppChrome) {
-                        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 0.dp,
+                        ) {
                             Screen.entries.forEach { screen ->
                                 NavigationBarItem(
                                     selected = selectedScreen == screen,
                                     onClick = {
                                         selectedScreen = screen
                                     },
-                                    icon = { NavIcon(screen) },
-                                    label = { Text(screen.title(), fontWeight = FontWeight.Bold) },
+                                    icon = { NavIcon(screen, selected = selectedScreen == screen) },
+                                    label = {
+                                        Text(
+                                            text = screen.title(),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -206,18 +228,18 @@ fun BandoriPetApp(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
-                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
-                    if (showAppChrome) {
-                        Header(selectedModel)
-                        Spacer(Modifier.height(12.dp))
-                    }
                     AnimatedContent(
                         targetState = selectedScreen,
                         transitionSpec = {
-                            fadeIn(animationSpec = tween(160)) togetherWith
-                                fadeOut(animationSpec = tween(120))
+                            val direction = if (targetState.ordinal >= initialState.ordinal) 1 else -1
+                            (slideInHorizontally(animationSpec = tween(240)) { width -> direction * width / 12 } +
+                                fadeIn(animationSpec = tween(200))) togetherWith
+                                (slideOutHorizontally(animationSpec = tween(180)) { width -> -direction * width / 12 } +
+                                    fadeOut(animationSpec = tween(140)))
                         },
+                        contentKey = { it },
                         label = "screen",
                     ) { screen ->
                         when (screen) {
@@ -271,32 +293,43 @@ fun BandoriPetApp(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Header(selectedModel: ModelChoice?) {
-    Column {
-        Text(
-            text = I18n.t("app_title"),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = selectedModel?.title ?: I18n.t("header_select_model"),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+private fun AppTopBar(selectedModel: ModelChoice?) {
+    CenterAlignedTopAppBar(
+        title = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = I18n.t("app_title"),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = selectedModel?.title ?: I18n.t("header_select_model"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    )
 }
 
 @Composable
-private fun NavIcon(screen: Screen) {
+private fun NavIcon(screen: Screen, selected: Boolean) {
     Icon(
-        imageVector = when (screen) {
-            Screen.Live2D -> Icons.Outlined.Face
-            Screen.Model -> Icons.Outlined.ViewInAr
-            Screen.Settings -> Icons.Outlined.Settings
+        imageVector = when (screen to selected) {
+            Screen.Live2D to true -> Icons.Filled.Face
+            Screen.Model to true -> Icons.Filled.ViewInAr
+            Screen.Settings to true -> Icons.Filled.Settings
+            Screen.Live2D to false -> Icons.Outlined.Face
+            Screen.Model to false -> Icons.Outlined.ViewInAr
+            else -> Icons.Outlined.Settings
         },
         contentDescription = screen.title(),
     )

@@ -1,6 +1,7 @@
 package com.bandori.pet.llm
 
 import android.app.Application
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bandori.pet.data.ModelChoice
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@Immutable
 data class ChatUiState(
     val characterId: String? = null,
     val messages: List<ChatMessage> = emptyList(),

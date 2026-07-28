@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.CardDefaults
@@ -35,8 +36,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -50,15 +49,14 @@ import com.bandori.pet.I18n
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.Live2DControlIcon
 import com.bandori.pet.data.ModelChoice
-import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.live2d.Live2DRenderView
 import com.bandori.pet.llm.Live2DChatViewModel
 import com.bandori.pet.ui.ImageBitmapCache
+import com.bandori.pet.ui.SampledImageDecoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
-import android.graphics.BitmapFactory
 
 @Composable
 fun Live2DScreen(
@@ -114,8 +112,8 @@ fun Live2DScreen(
     } else {
         ElevatedCard(
             modifier = modifier.fillMaxSize(),
-            shape = RoundedCornerShape(32.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Live2DStage(
                 selectedModel = selectedModel,
@@ -126,7 +124,7 @@ fun Live2DScreen(
                 fullScreen = false,
                 chatExpanded = chatExpanded,
                 chatViewModel = chatViewModel,
-                cornerRadius = 26.dp,
+                cornerRadius = 24.dp,
                 onStatusChanged = { status = it },
                 onInteraction = { revealControls() },
                 onLockedChange = {
@@ -164,36 +162,20 @@ fun Live2DStage(
     onChatExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(cornerRadius)
-    var renderView by remember(selectedModel) { mutableStateOf<Live2DRenderView?>(null) }
-    val presentationScale by animateFloatAsState(
-        targetValue = if (chatExpanded) 0.72f else 1f,
-        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
-        label = "chatPresentationScale",
-    )
-    val presentationOffsetY by animateFloatAsState(
-        targetValue = if (chatExpanded) 0.36f else 0f,
-        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
-        label = "chatPresentationOffsetY",
-    )
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val surface = MaterialTheme.colorScheme.surface
+    val stageBackground = remember(primaryContainer, surface) {
+        Brush.verticalGradient(colors = listOf(primaryContainer, surface))
+    }
     LaunchedEffect(selectedModel?.characterId) {
         selectedModel?.let(chatViewModel::selectCharacter)
         if (selectedModel == null) onChatExpandedChange(false)
     }
-    LaunchedEffect(renderView, chatViewModel) {
-        chatViewModel.actions.collect { action -> renderView?.playAction(action) }
-    }
     Box(
         modifier = modifier
             .clip(shape)
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primaryContainer,
-                        MaterialTheme.colorScheme.surface,
-                    ),
-                ),
-            )
+            .background(stageBackground)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
         contentAlignment = Alignment.Center,
     ) {
@@ -205,39 +187,15 @@ fun Live2DStage(
         if (selectedModel == null) {
             EmptyMessage(I18n.t("empty_no_model_title"), I18n.t("empty_no_model_body"))
         } else {
-            AndroidView(
+            Live2DRenderer(
+                selectedModel = selectedModel,
+                renderSettings = renderSettings,
+                locked = locked,
+                chatExpanded = chatExpanded,
+                chatViewModel = chatViewModel,
+                onStatusChanged = onStatusChanged,
+                onInteraction = onInteraction,
                 modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    Live2DRenderView(context).apply {
-                        renderView = this
-                        statusChanged = onStatusChanged
-                        interactionChanged = onInteraction
-                        setInteractionLocked(locked)
-                        setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
-                        setRenderResolution(renderSettings.renderResolution)
-                        setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
-                        setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
-                        setPresentationTransform(presentationScale, presentationOffsetY)
-                        setModel(selectedModel)
-                    }
-                },
-                update = { view ->
-                    view.statusChanged = onStatusChanged
-                    view.interactionChanged = onInteraction
-                    view.setInteractionLocked(locked)
-                    view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
-                    view.setRenderResolution(renderSettings.renderResolution)
-                    view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
-                    view.setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
-                    view.setPresentationTransform(presentationScale, presentationOffsetY)
-                    view.setModel(selectedModel)
-                    renderView = view
-                },
-                onReset = null,
-                onRelease = { view ->
-                    if (renderView === view) renderView = null
-                    view.release()
-                },
             )
         }
         status?.let {
@@ -301,6 +259,69 @@ fun Live2DStage(
 }
 
 @Composable
+private fun Live2DRenderer(
+    selectedModel: ModelChoice,
+    renderSettings: RenderSettings,
+    locked: Boolean,
+    chatExpanded: Boolean,
+    chatViewModel: Live2DChatViewModel,
+    onStatusChanged: (String?) -> Unit,
+    onInteraction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var renderView by remember(selectedModel) { mutableStateOf<Live2DRenderView?>(null) }
+    val presentationScale by animateFloatAsState(
+        targetValue = if (chatExpanded) 0.72f else 1f,
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+        label = "chatPresentationScale",
+    )
+    val presentationOffsetY by animateFloatAsState(
+        targetValue = if (chatExpanded) 0.36f else 0f,
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+        label = "chatPresentationOffsetY",
+    )
+
+    LaunchedEffect(renderView, chatViewModel) {
+        chatViewModel.actions.collect { action -> renderView?.playAction(action) }
+    }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            Live2DRenderView(context).apply {
+                renderView = this
+                statusChanged = onStatusChanged
+                interactionChanged = onInteraction
+                setInteractionLocked(locked)
+                setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+                setRenderResolution(renderSettings.renderResolution)
+                setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
+                setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
+                setPresentationTransform(presentationScale, presentationOffsetY)
+                setModel(selectedModel)
+            }
+        },
+        update = { view ->
+            view.statusChanged = onStatusChanged
+            view.interactionChanged = onInteraction
+            view.setInteractionLocked(locked)
+            view.setRenderOptions(renderSettings.fpsLimit, renderSettings.vsyncEnabled)
+            view.setRenderResolution(renderSettings.renderResolution)
+            view.setFpsDisplayEnabled(renderSettings.fpsDisplayEnabled)
+            view.setGazeFollowEnabled(renderSettings.gazeFollowEnabled)
+            view.setPresentationTransform(presentationScale, presentationOffsetY)
+            view.setModel(selectedModel)
+            renderView = view
+        },
+        onReset = null,
+        onRelease = { view ->
+            if (renderView === view) renderView = null
+            view.release()
+        },
+    )
+}
+
+@Composable
 fun Live2DControlButton(
     icon: Live2DControlIcon,
     modifier: Modifier = Modifier,
@@ -310,11 +331,11 @@ fun Live2DControlButton(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.94f),
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(18.dp),
-        tonalElevation = 8.dp,
-        shadowElevation = 8.dp,
+        shape = CircleShape,
+        tonalElevation = 6.dp,
+        shadowElevation = 4.dp,
     ) {
         Canvas(
             modifier = Modifier
@@ -375,17 +396,13 @@ fun Live2DControlButton(
 fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale) {
     val context = LocalContext.current
     val appContext = context.applicationContext
-    val cacheKey = uri?.let { "content:$it" }
+    val cacheKey = uri?.let { "content:$BACKGROUND_IMAGE_MAX_EDGE:$it" }
     var bitmap by remember(cacheKey) { mutableStateOf(cacheKey?.let(ImageBitmapCache::get)) }
     LaunchedEffect(uri) {
         if (bitmap != null) return@LaunchedEffect
         bitmap = uri?.let {
             withContext(Dispatchers.IO) {
-                runCatching {
-                    appContext.contentResolver.openInputStream(Uri.parse(it))?.use { input ->
-                        BitmapFactory.decodeStream(input)?.asImageBitmap()
-                    }
-                }.getOrNull()
+                SampledImageDecoder.decodeContentUri(appContext, Uri.parse(it), BACKGROUND_IMAGE_MAX_EDGE)
             }
         }?.also { decoded -> cacheKey?.let { ImageBitmapCache.put(it, decoded) } }
     }
@@ -393,6 +410,8 @@ fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale
         androidx.compose.foundation.Image(bitmap = bitmap!!, contentDescription = null, modifier = modifier, contentScale = contentScale)
     }
 }
+
+private const val BACKGROUND_IMAGE_MAX_EDGE = 2048
 
 @Composable
 fun EmptyMessage(title: String, body: String) {

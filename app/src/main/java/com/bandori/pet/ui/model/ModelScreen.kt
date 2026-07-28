@@ -1,6 +1,9 @@
 package com.bandori.pet.ui.model
 
-import android.graphics.BitmapFactory
+import android.os.SystemClock
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -52,8 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +73,7 @@ import com.bandori.pet.data.ZstModelArchive
 import com.bandori.pet.ui.formatTransferProgress
 import com.bandori.pet.ui.formatTransferSpeed
 import com.bandori.pet.ui.ImageBitmapCache
+import com.bandori.pet.ui.SampledImageDecoder
 import com.bandori.pet.ui.isMoc3
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -129,14 +131,20 @@ fun ModelScreen(
             actionLabel = actionLabel,
         )
         if (selectedCharacterId == character.id) downloadMessage = null
+        var lastProgressDispatchMs = 0L
         scope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     ZstModelArchive.downloadCharacter(context.applicationContext, character.id) { progress ->
-                        scope.launch {
-                            modelTransfer = modelTransfer
-                                ?.takeIf { it.characterId == character.id }
-                                ?.copy(progress = progress)
+                        val now = SystemClock.elapsedRealtime()
+                        val complete = progress.totalBytes > 0 && progress.downloadedBytes >= progress.totalBytes
+                        if (complete || now - lastProgressDispatchMs >= 80L) {
+                            lastProgressDispatchMs = now
+                            scope.launch {
+                                modelTransfer = modelTransfer
+                                    ?.takeIf { it.characterId == character.id }
+                                    ?.copy(progress = progress)
+                            }
                         }
                     }
                 }
@@ -185,7 +193,11 @@ fun ModelScreen(
                 contentPadding = PaddingValues(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(data.bands.size, key = { data.bands[it].id }) { index ->
+                items(
+                    count = data.bands.size,
+                    key = { data.bands[it].id },
+                    contentType = { "band" },
+                ) { index ->
                     val band = data.bands[index]
                     ImageCard(
                         modifier = Modifier.width(186.dp),
@@ -214,7 +226,11 @@ fun ModelScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(characters, key = { it.id }) { character ->
+                items(
+                    items = characters,
+                    key = { it.id },
+                    contentType = { "character" },
+                ) { character ->
                     var menuExpanded by remember(character.id) { mutableStateOf(false) }
                     val hasDownloadedModel = remember(menuExpanded, modelAssetsVersion, character.id) {
                         menuExpanded && ZstModelArchive.hasDownloadedCharacter(context.applicationContext, character.id)
@@ -331,7 +347,11 @@ fun ModelScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        items(availableModels, key = { it.modelAssetPath }) { model ->
+                        items(
+                            items = availableModels,
+                            key = { it.modelAssetPath },
+                            contentType = { "costume" },
+                        ) { model ->
                             TextCard(
                                 title = model.costumeName,
                                 subtitle = model.costumeId,
@@ -458,18 +478,18 @@ private fun SelectionWindow(
             }
         }
         Spacer(Modifier.height(8.dp))
-        ElevatedCard(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(14.dp)
-                    .clip(RoundedCornerShape(20.dp)),
+                    .clip(MaterialTheme.shapes.large),
                 content = content,
             )
         }
@@ -490,7 +510,22 @@ fun ImageCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = MaterialTheme.shapes.large
+    val borderWidth by animateDpAsState(
+        targetValue = if (selected) 3.dp else 1.dp,
+        animationSpec = tween(180),
+        label = "imageCardBorder",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        animationSpec = tween(180),
+        label = "imageCardBorderColor",
+    )
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+        animationSpec = tween(180),
+        label = "imageCardContainer",
+    )
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -498,18 +533,8 @@ fun ImageCard(
             .clip(shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = shape,
-        border = if (selected) {
-            BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        },
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHighest
-            },
-        ),
+        border = BorderStroke(borderWidth, borderColor),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
     ) {
         Box(Modifier.fillMaxSize()) {
             AssetImage(
@@ -551,7 +576,22 @@ fun TextCard(
     showMoc3Badge: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = MaterialTheme.shapes.large
+    val borderWidth by animateDpAsState(
+        targetValue = if (selected) 2.dp else 1.dp,
+        animationSpec = tween(180),
+        label = "textCardBorder",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        animationSpec = tween(180),
+        label = "textCardBorderColor",
+    )
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        animationSpec = tween(180),
+        label = "textCardContainer",
+    )
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -559,10 +599,8 @@ fun TextCard(
             .clip(shape)
             .clickable(onClick = onClick),
         shape = shape,
-        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
+        border = BorderStroke(borderWidth, borderColor),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
     ) {
         Box(Modifier.fillMaxSize()) {
             Column(
@@ -599,16 +637,15 @@ fun TextCard(
 fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, contentScale: ContentScale, placeholderText: String? = null) {
     val context = LocalContext.current
     val appContext = context.applicationContext
-    val cacheKey = path?.let { "asset:$reloadKey:$it" }
+    val cacheKey = path?.let { "asset:$MODEL_IMAGE_MAX_EDGE:$reloadKey:$it" }
     var bitmap by remember(cacheKey) { mutableStateOf(cacheKey?.let(ImageBitmapCache::get)) }
     LaunchedEffect(path, reloadKey) {
         if (bitmap != null) return@LaunchedEffect
         bitmap = path?.let {
             withContext(Dispatchers.IO) {
-                runCatching {
-                    appContext.assets.open(it).use { input -> BitmapFactory.decodeStream(input)?.asImageBitmap() }
-                }.getOrNull() ?: ZstModelArchive.readLogicalPath(appContext, it)
-                    ?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
+                SampledImageDecoder.decodeAsset(appContext, it, MODEL_IMAGE_MAX_EDGE)
+                    ?: ZstModelArchive.readLogicalPath(appContext, it)
+                        ?.let { bytes -> SampledImageDecoder.decodeBytes(bytes, MODEL_IMAGE_MAX_EDGE) }
             }
         }?.also { decoded -> cacheKey?.let { ImageBitmapCache.put(it, decoded) } }
     }
@@ -636,3 +673,5 @@ fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, contentSca
         }
     }
 }
+
+private const val MODEL_IMAGE_MAX_EDGE = 640

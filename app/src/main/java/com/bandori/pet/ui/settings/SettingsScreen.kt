@@ -12,40 +12,41 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -133,8 +134,8 @@ fun SettingsScreen(
     }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 4.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "theme") {
@@ -199,9 +200,11 @@ private enum class SettingsDestination { Root, Llm }
 private fun LlmSettingsEntryCard(onClick: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { LlmSettings.load(context.applicationContext) }
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp),
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
@@ -222,6 +225,7 @@ private fun LlmSettingsEntryCard(onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LlmSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -246,26 +250,51 @@ private fun LlmSettingsScreen(onBack: () -> Unit) {
         }
     }
 
-    Column(
+    Scaffold(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
                 val direction = if (predictiveBackEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
                 translationX = size.width * 0.16f * predictiveBackProgress * direction
                 alpha = 1f - 0.12f * predictiveBackProgress
-            }
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, contentDescription = I18n.t("back")) }
-            Column {
-                Text(I18n.t("settings_llm_title"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(I18n.t("settings_llm_desc"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(I18n.t("settings_llm_title"), style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            I18n.t("settings_llm_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = I18n.t("back"))
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
+        },
+    ) { scaffoldPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(scaffoldPadding),
+            contentPadding = PaddingValues(bottom = 20.dp),
+        ) {
+            item(key = "llm_form") {
+                SettingsSectionCard {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 OutlinedTextField(
                     value = draft.baseUrl,
                     onValueChange = { draft = draft.copy(baseUrl = it); saved = false },
@@ -373,6 +402,8 @@ private fun LlmSettingsScreen(onBack: () -> Unit) {
                 TextButton(modifier = Modifier.fillMaxWidth(), onClick = { confirmClearAll = true }) {
                     Text(I18n.t("settings_llm_clear_all"))
                 }
+                    }
+                }
             }
         }
     }
@@ -406,7 +437,7 @@ private fun ThemeSettingsCard(
 ) {
     var darkModeMenuExpanded by remember { mutableStateOf(false) }
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+    SettingsSectionCard {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(I18n.t("settings_theme_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -491,7 +522,7 @@ private fun RenderSettingsCard(
         onSettingsChanged(settings.copy(backgroundUri = uri.toString()))
     }
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+    SettingsSectionCard {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(I18n.t("settings_live2d_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -633,7 +664,7 @@ private fun RenderSettingsCard(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    Button(
+                    FilledTonalButton(
                         onClick = {
                             backgroundPicker.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -673,7 +704,7 @@ private fun FloatingOverlaySettingsCard(
         permissionLauncher.launch(FloatingLive2DOverlayService.permissionIntent(context))
     }
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+    SettingsSectionCard {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(I18n.t("settings_floating_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -697,7 +728,7 @@ private fun FloatingOverlaySettingsCard(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    Button(onClick = ::requestPermission) { Text(I18n.t("settings_floating_auth")) }
+                    FilledTonalButton(onClick = ::requestPermission) { Text(I18n.t("settings_floating_auth")) }
                 }
             }
             Row(
@@ -783,7 +814,7 @@ private fun FloatingOverlaySettingsCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Button(
+                FilledTonalButton(
                     enabled = selectedModel != null,
                     onClick = {
                         val model = selectedModel ?: return@Button
@@ -807,7 +838,7 @@ private fun FloatingOverlaySettingsCard(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                Button(
+                FilledTonalButton(
                     enabled = settings.items.isNotEmpty(),
                     onClick = {
                         val next = resetFloatingLive2DItemPositions(appContext)
@@ -890,7 +921,7 @@ private fun WallpaperSettingsCard(
         onBackgroundChanged(uri.toString())
     }
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+    SettingsSectionCard {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(I18n.t("settings_wallpaper_title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -928,7 +959,7 @@ private fun WallpaperSettingsCard(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                Button(onClick = onAdjustPosition) {
+                FilledTonalButton(onClick = onAdjustPosition) {
                     Text(I18n.t("settings_wallpaper_adjust_btn"))
                 }
             }
@@ -946,7 +977,7 @@ private fun WallpaperSettingsCard(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    Button(
+                    FilledTonalButton(
                         onClick = {
                             backgroundPicker.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -968,12 +999,27 @@ private fun WallpaperSettingsCard(
 
 @Composable
 private fun InfoCard(title: String, body: String) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+    SettingsSectionCard {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@Composable
+private fun SettingsSectionCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+        content = content,
+    )
 }
 
 private fun darkModeLabel(mode: DarkModeSetting): String = when (mode) {

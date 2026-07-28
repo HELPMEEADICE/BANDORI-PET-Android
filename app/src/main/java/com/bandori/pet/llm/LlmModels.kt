@@ -1,6 +1,7 @@
 package com.bandori.pet.llm
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import com.bandori.pet.SETTINGS_PREFS
 
 enum class ThinkingMode(val value: String) {
@@ -14,6 +15,7 @@ enum class ThinkingMode(val value: String) {
     }
 }
 
+@Immutable
 data class LlmSettings(
     val baseUrl: String = "",
     val apiKey: String = "",
@@ -74,6 +76,7 @@ data class LlmSettings(
     ).joinToString("\n\n")
 }
 
+@Immutable
 data class ChatMessage(
     val id: String,
     val role: String,

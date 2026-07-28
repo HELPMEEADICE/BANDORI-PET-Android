@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,8 +26,6 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -61,7 +58,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -159,8 +155,8 @@ fun Live2DChatOverlay(
                 val containerHeight = launcherSize + (panelHeight - launcherSize) * morphProgress
                 val bottomPadding = 18.dp + ((16.dp + imeOverlap) - 18.dp) * morphProgress
                 val cornerRadius = 26.dp + (28.dp - 26.dp) * morphProgress
-                val launcherColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-                val panelColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f)
+                val launcherColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f)
+                val panelColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.98f)
 
                 Surface(
                     modifier = Modifier
@@ -176,8 +172,8 @@ fun Live2DChatOverlay(
                     shape = RoundedCornerShape(cornerRadius),
                     color = lerp(launcherColor, panelColor, morphProgress),
                     contentColor = MaterialTheme.colorScheme.onSurface,
-                    tonalElevation = 8.dp + 4.dp * morphProgress,
-                    shadowElevation = 10.dp + 6.dp * morphProgress,
+                    tonalElevation = 6.dp + 4.dp * morphProgress,
+                    shadowElevation = 6.dp + 4.dp * morphProgress,
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         if (!transition.currentState || !transition.targetState) {
@@ -364,16 +360,24 @@ private fun ChatMessageList(
     val itemCount = messages.size + if (streamingText.isNotBlank() || thinking) 1 else 0
     val streamScrollBucket = streamingText.length / 24
     LaunchedEffect(itemCount, streamScrollBucket) {
-        if (itemCount > 0) listState.scrollToItem(itemCount - 1)
+        val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        val wasNearBottom = lastVisibleIndex < 0 || lastVisibleIndex >= itemCount - 2
+        if (itemCount > 0 && wasNearBottom) listState.scrollToItem(itemCount - 1)
     }
     LazyColumn(
         modifier = modifier,
         state = listState,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(messages, key = { it.id }) { message -> ChatBubble(message.role, message.content) }
+        items(
+            items = messages,
+            key = { it.id },
+            contentType = { "message" },
+        ) { message ->
+            ChatBubble(message.role, message.content)
+        }
         if (streamingText.isNotBlank() || thinking) {
-            item(key = "streaming") {
+            item(key = "streaming", contentType = "message") {
                 ChatBubble("assistant", streamingText.ifBlank { I18n.t("chat_thinking") }, thinking)
             }
         }
@@ -382,14 +386,20 @@ private fun ChatMessageList(
 
 @Composable
 private fun ChatBubble(role: String, content: String, thinking: Boolean = false) {
+    val fromUser = role == "user"
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (role == "user") Arrangement.End else Arrangement.Start,
+        horizontalArrangement = if (fromUser) Arrangement.End else Arrangement.Start,
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.86f),
-            shape = RoundedCornerShape(18.dp),
-            color = if (role == "user") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+            shape = RoundedCornerShape(
+                topStart = 20.dp,
+                topEnd = 20.dp,
+                bottomStart = if (fromUser) 20.dp else 6.dp,
+                bottomEnd = if (fromUser) 6.dp else 20.dp,
+            ),
+            color = if (fromUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
         ) {
             Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (thinking) {
