@@ -21,6 +21,8 @@ class FullscreenLive2DActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val appContext = applicationContext
+        val renderSettings = RenderSettings.load(appContext)
+        preferRefreshRate(renderSettings.fpsLimit)
         I18n.init(appContext)
         setContent {
             val themeSettings = remember { ThemeSettings.load(appContext) }
@@ -36,7 +38,7 @@ class FullscreenLive2DActivity : ComponentActivity() {
             ) {
                 Live2DScreen(
                     selectedModel = selectedModel,
-                    renderSettings = remember { RenderSettings.load(appContext) },
+                    renderSettings = renderSettings,
                     fullScreen = true,
                     onFullScreenChanged = { fullScreen ->
                         if (!fullScreen) finish()
@@ -44,6 +46,14 @@ class FullscreenLive2DActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+        }
+    }
+
+    private fun preferRefreshRate(fpsLimit: Int) {
+        window.attributes = window.attributes.apply {
+            // A dedicated, mostly static full-screen window can otherwise be classified as
+            // low-frame-rate content by Android's dynamic refresh-rate policy.
+            preferredRefreshRate = fpsLimit.toFloat()
         }
     }
 }

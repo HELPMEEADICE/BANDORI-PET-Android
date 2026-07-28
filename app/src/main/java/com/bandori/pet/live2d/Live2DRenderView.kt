@@ -2,6 +2,7 @@ package com.bandori.pet.live2d
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.Surface
@@ -120,6 +121,7 @@ class Live2DRenderView @JvmOverloads constructor(
         if (this.fpsLimit == nextFpsLimit && this.vsyncEnabled == vsyncEnabled) return
         this.fpsLimit = nextFpsLimit
         this.vsyncEnabled = vsyncEnabled
+        updateSurfaceFrameRate()
         if (handle != 0L) NativeLive2D.setRenderOptions(handle, nextFpsLimit, vsyncEnabled)
     }
 
@@ -142,6 +144,7 @@ class Live2DRenderView @JvmOverloads constructor(
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         renderSurface?.release()
         renderSurface = Surface(surface)
+        updateSurfaceFrameRate()
         loadSelectedModel()
     }
 
@@ -172,6 +175,17 @@ class Live2DRenderView @JvmOverloads constructor(
         if (handle != 0L) {
             NativeLive2D.destroy(handle)
             handle = 0L
+        }
+    }
+
+    private fun updateSurfaceFrameRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val surface = renderSurface?.takeIf(Surface::isValid) ?: return
+        runCatching {
+            surface.setFrameRate(
+                fpsLimit.toFloat(),
+                Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+            )
         }
     }
 
