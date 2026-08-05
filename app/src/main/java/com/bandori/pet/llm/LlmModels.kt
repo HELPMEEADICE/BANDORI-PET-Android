@@ -84,6 +84,32 @@ data class ChatMessage(
     val timestamp: Long,
 )
 
+@Immutable
+data class ChatConversation(
+    val id: String,
+    val characterId: String,
+    val title: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val messages: List<ChatMessage>,
+)
+
+@Immutable
+data class ChatConversationSummary(
+    val id: String,
+    val characterId: String,
+    val title: String,
+    val preview: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val messageCount: Int,
+)
+
+data class ChatHistorySnapshot(
+    val conversations: List<ChatConversationSummary>,
+    val activeConversation: ChatConversation?,
+)
+
 sealed interface LlmStreamEvent {
     data class Content(val text: String) : LlmStreamEvent
     data object ReasoningStarted : LlmStreamEvent

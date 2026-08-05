@@ -33,8 +33,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Send
@@ -69,13 +73,18 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bandori.pet.I18n
 import com.bandori.pet.data.ModelChoice
+import com.bandori.pet.llm.ChatConversationSummary
 import com.bandori.pet.llm.ChatMessage
+import com.bandori.pet.llm.ChatUiState
 import com.bandori.pet.llm.Live2DChatViewModel
 import com.bandori.pet.llm.LlmSettings
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun Live2DChatOverlay(
@@ -91,12 +100,16 @@ fun Live2DChatOverlay(
     val focusManager = LocalFocusManager.current
     val settings = remember { LlmSettings.load(context.applicationContext) }
     val input = remember(model.characterId) { mutableStateOf("") }
-    var confirmClear by remember { mutableStateOf(false) }
+    var showingHistory by remember(model.characterId) { mutableStateOf(false) }
+    var pendingDelete by remember(model.characterId) { mutableStateOf<ChatConversationSummary?>(null) }
     var overlayBottomOnScreenPx by remember { mutableStateOf(0f) }
 
     LaunchedEffect(model.characterId, expanded) { viewModel.selectCharacter(model, force = expanded) }
     LaunchedEffect(expanded) {
         if (!expanded) focusManager.clearFocus()
+    }
+    LaunchedEffect(showingHistory) {
+        if (showingHistory) focusManager.clearFocus()
     }
 
     Box(
@@ -191,7 +204,20 @@ fun Live2DChatOverlay(
                                 settings = settings,
                                 compactForIme = compactForIme,
                                 input = input,
-                                onClearRequest = { confirmClear = true },
+                                showingHistory = showingHistory,
+                                onHistoryRequest = { showingHistory = true },
+                                onHistoryBack = { showingHistory = false },
+                                onNewConversation = {
+                                    input.value = ""
+                                    viewModel.startNewConversation(model.characterId)
+                                    showingHistory = false
+                                },
+                                onConversationSelected = { conversationId ->
+                                    input.value = ""
+                                    viewModel.selectConversation(model.characterId, conversationId)
+                                    showingHistory = false
+                                },
+                                onDeleteRequest = { pendingDelete = it },
                                 onCollapse = { onExpandedChange(false) },
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -205,18 +231,25 @@ fun Live2DChatOverlay(
         }
     }
 
-    if (confirmClear) {
+    pendingDelete?.let { conversation ->
         AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text(I18n.t("chat_clear")) },
-            text = { Text(I18n.t("chat_clear_confirm", model.characterName)) },
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(I18n.t("chat_delete_conversation")) },
+            text = {
+                Text(
+                    I18n.t(
+                        "chat_delete_conversation_confirm",
+                        conversation.title.ifBlank { I18n.t("chat_new_conversation") },
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.clearCurrent(model.characterId)
-                    confirmClear = false
+                    viewModel.deleteConversation(model.characterId, conversation.id)
+                    pendingDelete = null
                 }) { Text(I18n.t("confirm")) }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(I18n.t("cancel")) } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(I18n.t("cancel")) } },
         )
     }
 }
@@ -228,11 +261,28 @@ private fun ChatPanelContent(
     settings: LlmSettings,
     compactForIme: Boolean,
     input: MutableState<String>,
-    onClearRequest: () -> Unit,
+    showingHistory: Boolean,
+    onHistoryRequest: () -> Unit,
+    onHistoryBack: () -> Unit,
+    onNewConversation: () -> Unit,
+    onConversationSelected: (String) -> Unit,
+    onDeleteRequest: (ChatConversationSummary) -> Unit,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    if (showingHistory) {
+        ChatHistoryPanel(
+            state = state,
+            onBack = onHistoryBack,
+            onNewConversation = onNewConversation,
+            onConversationSelected = onConversationSelected,
+            onDeleteRequest = onDeleteRequest,
+            modifier = modifier,
+        )
+        return
+    }
 
     Column(modifier) {
         if (!compactForIme) {
@@ -248,8 +298,8 @@ private fun ChatPanelContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = onClearRequest) {
-                    Icon(Icons.Outlined.Delete, contentDescription = I18n.t("chat_clear"))
+                IconButton(onClick = onHistoryRequest) {
+                    Icon(Icons.Outlined.History, contentDescription = I18n.t("chat_history"))
                 }
                 IconButton(onClick = onCollapse) {
                     Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = I18n.t("chat_minimize"))
@@ -257,7 +307,11 @@ private fun ChatPanelContent(
             }
             Spacer(Modifier.height(8.dp))
         }
-        if (!settings.isConfigured) {
+        if (state.isHistoryLoading) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (!settings.isConfigured) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
                     I18n.t("chat_not_configured"),
@@ -283,13 +337,15 @@ private fun ChatPanelContent(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                if (error == "LLM_NOT_CONFIGURED") I18n.t("chat_not_configured") else error,
+                                chatErrorText(error),
                                 modifier = Modifier.weight(1f),
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodySmall,
                             )
-                            IconButton(onClick = { viewModel.retry(model) }) {
-                                Icon(Icons.Outlined.Refresh, contentDescription = I18n.t("chat_retry"))
+                            if (isRetryableChatError(error)) {
+                                IconButton(onClick = { viewModel.retry(model) }) {
+                                    Icon(Icons.Outlined.Refresh, contentDescription = I18n.t("chat_retry"))
+                                }
                             }
                         }
                     }
@@ -339,6 +395,147 @@ private fun ChatPanelContent(
         }
     }
 }
+
+@Composable
+private fun ChatHistoryPanel(
+    state: ChatUiState,
+    onBack: () -> Unit,
+    onNewConversation: () -> Unit,
+    onConversationSelected: (String) -> Unit,
+    onDeleteRequest: (ChatConversationSummary) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Outlined.ArrowBack, contentDescription = I18n.t("back"))
+            }
+            Text(
+                I18n.t("chat_history"),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            IconButton(onClick = onNewConversation) {
+                Icon(Icons.Outlined.AddComment, contentDescription = I18n.t("chat_new_conversation"))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        when {
+            state.isHistoryLoading -> Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+            state.conversations.isEmpty() -> Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    I18n.t("chat_history_empty"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(
+                    items = state.conversations,
+                    key = { it.id },
+                    contentType = { "conversation" },
+                ) { conversation ->
+                    val selected = conversation.id == state.conversationId
+                    Surface(
+                        onClick = { onConversationSelected(conversation.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        },
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, top = 10.dp, bottom = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    conversation.title.ifBlank { I18n.t("chat_new_conversation") },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                )
+                                Text(
+                                    conversation.preview.ifBlank { I18n.t("chat_empty_conversation") },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    formatConversationTimestamp(conversation.updatedAt),
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (selected) {
+                                Icon(
+                                    Icons.Outlined.Check,
+                                    contentDescription = I18n.t("chat_current_conversation"),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            IconButton(onClick = { onDeleteRequest(conversation) }) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    contentDescription = I18n.t("chat_delete_conversation"),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        state.error?.let { error ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                chatErrorText(error),
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+private fun formatConversationTimestamp(timestamp: Long): String {
+    if (timestamp <= 0L) return ""
+    return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(timestamp))
+}
+
+private fun chatErrorText(error: String): String = when (error) {
+    Live2DChatViewModel.ERROR_LLM_NOT_CONFIGURED -> I18n.t("chat_not_configured")
+    Live2DChatViewModel.ERROR_HISTORY_LOAD -> I18n.t("chat_history_load_failed")
+    Live2DChatViewModel.ERROR_HISTORY_SAVE -> I18n.t("chat_history_save_failed")
+    Live2DChatViewModel.ERROR_HISTORY_DELETE -> I18n.t("chat_history_delete_failed")
+    else -> error
+}
+
+private fun isRetryableChatError(error: String): Boolean = error !in setOf(
+    Live2DChatViewModel.ERROR_LLM_NOT_CONFIGURED,
+    Live2DChatViewModel.ERROR_HISTORY_LOAD,
+    Live2DChatViewModel.ERROR_HISTORY_SAVE,
+    Live2DChatViewModel.ERROR_HISTORY_DELETE,
+)
 
 private fun calculateImeOverlapPx(
     containerBottomOnScreenPx: Float,
