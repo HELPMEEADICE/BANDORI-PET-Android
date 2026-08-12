@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -67,6 +68,7 @@ class FloatingLive2DOverlayService : Service() {
                     fpsDisplayEnabled = renderSettings.fpsDisplayEnabled,
                     vsyncEnabled = renderSettings.vsyncEnabled,
                     renderResolution = renderSettings.renderResolution,
+                    gazeFollowEnabled = renderSettings.gazeFollowEnabled,
                 )
             } else {
                 if (existing != null) removeWindow(item.id)
@@ -79,12 +81,17 @@ class FloatingLive2DOverlayService : Service() {
                     fpsDisplayEnabled = renderSettings.fpsDisplayEnabled,
                     vsyncEnabled = renderSettings.vsyncEnabled,
                     renderResolution = renderSettings.renderResolution,
+                    gazeFollowEnabled = renderSettings.gazeFollowEnabled,
                     onBoundsChanged = { x, y, width, height ->
                         saveFloatingLive2DItemBounds(applicationContext, item.id, x, y, width, height)
                     },
                 )
-                windowManager.addView(window.root, window.params)
-                windows[item.id] = window
+                runCatching { windowManager.addView(window.root, window.params) }
+                    .onSuccess { windows[item.id] = window }
+                    .onFailure {
+                        window.release()
+                        Log.e(TAG, "Failed to add floating Live2D window", it)
+                    }
             }
         }
     }
@@ -109,6 +116,7 @@ class FloatingLive2DOverlayService : Service() {
         fpsDisplayEnabled: Boolean,
         vsyncEnabled: Boolean,
         renderResolution: RenderResolution,
+        gazeFollowEnabled: Boolean,
         onBoundsChanged: (Int, Int, Int, Int) -> Unit,
     ) {
         private val modelAssetPath = item.model.modelAssetPath
@@ -117,6 +125,7 @@ class FloatingLive2DOverlayService : Service() {
             setRenderOptions(fpsLimit, vsyncEnabled)
             setRenderResolution(renderResolution)
             setFpsDisplayEnabled(fpsDisplayEnabled)
+            setGazeFollowEnabled(gazeFollowEnabled)
             setModel(item.model)
         }
 
@@ -158,11 +167,13 @@ class FloatingLive2DOverlayService : Service() {
             fpsDisplayEnabled: Boolean,
             vsyncEnabled: Boolean,
             renderResolution: RenderResolution,
+            gazeFollowEnabled: Boolean,
         ) {
             root.setLocked(locked)
             renderView.setRenderOptions(fpsLimit, vsyncEnabled)
             renderView.setRenderResolution(renderResolution)
             renderView.setFpsDisplayEnabled(fpsDisplayEnabled)
+            renderView.setGazeFollowEnabled(gazeFollowEnabled)
             val nextWidth = item.width.coerceIn(MIN_WIDTH, MAX_WIDTH)
             val nextHeight = item.height.coerceIn(MIN_HEIGHT, MAX_HEIGHT)
             val nextFlags = overlayWindowFlags(touchThrough)
@@ -186,6 +197,7 @@ class FloatingLive2DOverlayService : Service() {
         }
 
         fun release() {
+            root.cancelWindowUpdate()
             renderView.release()
         }
     }
@@ -208,6 +220,11 @@ class FloatingLive2DOverlayService : Service() {
         private var startSpan = 0f
         private var dragging = false
         private var resizing = false
+        private var windowUpdateScheduled = false
+        private val applyWindowUpdate = Runnable {
+            windowUpdateScheduled = false
+            updateWindowNow()
+        }
 
         override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
             if (locked) return false
@@ -256,6 +273,7 @@ class FloatingLive2DOverlayService : Service() {
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    flushWindowUpdate()
                     if (dragging || resizing) saveBounds()
                     dragging = false
                     resizing = false
@@ -303,6 +321,22 @@ class FloatingLive2DOverlayService : Service() {
         }
 
         fun updateWindow() {
+            if (windowUpdateScheduled) return
+            windowUpdateScheduled = true
+            postOnAnimation(applyWindowUpdate)
+        }
+
+        fun cancelWindowUpdate() {
+            removeCallbacks(applyWindowUpdate)
+            windowUpdateScheduled = false
+        }
+
+        private fun flushWindowUpdate() {
+            cancelWindowUpdate()
+            updateWindowNow()
+        }
+
+        private fun updateWindowNow() {
             runCatching { windowManager.updateViewLayout(this, params) }
         }
 
@@ -321,6 +355,7 @@ class FloatingLive2DOverlayService : Service() {
         private const val MIN_HEIGHT = 240
         private const val MAX_WIDTH = 1200
         private const val MAX_HEIGHT = 1600
+        private const val TAG = "BandoriPetFloating"
 
         fun sync(context: Context) {
             val appContext = context.applicationContext

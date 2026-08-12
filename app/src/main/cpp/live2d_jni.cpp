@@ -1173,7 +1173,10 @@ end
 }
 
 static void renderLoop(Renderer* renderer) {
-    if (!initEgl(renderer) || !initLua(renderer)) return;
+    if (!initEgl(renderer) || !initLua(renderer)) {
+        renderer->running.store(false);
+        return;
+    }
 
     auto previousFrameStart = std::chrono::steady_clock::now();
     auto fpsSampleStart = previousFrameStart;
@@ -1322,7 +1325,10 @@ static void renderLoop(Renderer* renderer) {
         const int fpsLimit = renderer->fpsLimit.load();
         if (fpsLimit > 0) {
             const auto frameDuration = std::chrono::nanoseconds(1000000000LL / fpsLimit);
-            std::this_thread::sleep_until(frameStart + frameDuration);
+            std::unique_lock<std::mutex> lock(renderer->pauseMutex);
+            renderer->pauseCondition.wait_until(lock, frameStart + frameDuration, [renderer] {
+                return !renderer->running.load() || renderer->paused.load();
+            });
         }
     }
 
@@ -1438,7 +1444,7 @@ Java_com_bandori_pet_live2d_NativeLive2D_setPaused(JNIEnv*, jobject, jlong handl
     auto* renderer = reinterpret_cast<Renderer*>(handle);
     if (renderer == nullptr) return;
     renderer->paused.store(paused == JNI_TRUE);
-    if (paused != JNI_TRUE) renderer->pauseCondition.notify_all();
+    renderer->pauseCondition.notify_all();
 }
 
 extern "C" JNIEXPORT void JNICALL

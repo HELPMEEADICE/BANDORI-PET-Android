@@ -419,13 +419,16 @@ fun ContentUriImage(uri: String?, modifier: Modifier, contentScale: ContentScale
     val appContext = context.applicationContext
     val cacheKey = uri?.let { "content:$BACKGROUND_IMAGE_MAX_EDGE:$it" }
     var bitmap by remember(cacheKey) { mutableStateOf(cacheKey?.let(ImageBitmapCache::get)) }
-    LaunchedEffect(uri) {
-        if (bitmap != null) return@LaunchedEffect
-        bitmap = uri?.let {
+    LaunchedEffect(cacheKey) {
+        val key = cacheKey ?: return@LaunchedEffect
+        if (bitmap != null || ImageBitmapCache.isKnownMissing(key)) return@LaunchedEffect
+        val decoded = uri?.let {
             withContext(Dispatchers.IO) {
                 SampledImageDecoder.decodeContentUri(appContext, Uri.parse(it), BACKGROUND_IMAGE_MAX_EDGE)
             }
-        }?.also { decoded -> cacheKey?.let { ImageBitmapCache.put(it, decoded) } }
+        }
+        if (decoded == null) ImageBitmapCache.markMissing(key) else ImageBitmapCache.put(key, decoded)
+        bitmap = decoded
     }
     if (bitmap != null) {
         androidx.compose.foundation.Image(bitmap = bitmap!!, contentDescription = null, modifier = modifier, contentScale = contentScale)

@@ -75,6 +75,7 @@ import com.bandori.pet.ui.formatTransferSpeed
 import com.bandori.pet.ui.ImageBitmapCache
 import com.bandori.pet.ui.SampledImageDecoder
 import com.bandori.pet.ui.isMoc3
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -95,7 +96,13 @@ fun ModelScreen(
     val scope = rememberCoroutineScope()
     val repository = remember(data) { DataRepository(context.applicationContext) }
     val selectedBand = remember(data, selectedBandId) {
-        data.bands.firstOrNull { it.id == selectedBandId } ?: data.bands.first()
+        data.bands.firstOrNull { it.id == selectedBandId } ?: data.bands.firstOrNull()
+    }
+    if (selectedBand == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(I18n.t("empty_no_model_title"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
     }
     val characters = remember(data, selectedBand.id) {
         selectedBand.characters.mapNotNull { id -> data.characters[id] }
@@ -113,7 +120,14 @@ fun ModelScreen(
             modelsLoading = false
         } else {
             modelsLoading = true
-            availableModels = withContext(Dispatchers.IO) { repository.availableModels(character) }
+            availableModels = try {
+                withContext(Dispatchers.IO) { repository.availableModels(character) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                downloadMessage = error.localizedMessage ?: I18n.t("model_download_failed")
+                emptyList()
+            }
             modelsLoading = false
         }
     }
@@ -133,7 +147,7 @@ fun ModelScreen(
         if (selectedCharacterId == character.id) downloadMessage = null
         var lastProgressDispatchMs = 0L
         scope.launch {
-            val result = runCatching {
+            val result = try {
                 withContext(Dispatchers.IO) {
                     ZstModelArchive.downloadCharacter(context.applicationContext, character.id) { progress ->
                         val now = SystemClock.elapsedRealtime()
@@ -148,6 +162,11 @@ fun ModelScreen(
                         }
                     }
                 }
+                Result.success(Unit)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                Result.failure(error)
             }
             result.onSuccess {
                 if (selectedCharacterId == character.id) downloadMessage = successMessage
@@ -170,10 +189,21 @@ fun ModelScreen(
 
     fun deleteCharacterModel(character: CharacterInfo) {
         scope.launch {
-            withContext(Dispatchers.IO) {
-                ZstModelArchive.deleteDownloadedCharacter(context.applicationContext, character.id)
+            try {
+                withContext(Dispatchers.IO) {
+                    val deleted = ZstModelArchive.deleteDownloadedCharacter(context.applicationContext, character.id)
+                    check(deleted || !ZstModelArchive.hasDownloadedCharacter(context.applicationContext, character.id)) {
+                        "Failed to delete downloaded model"
+                    }
+                }
+                onModelAssetsChanged()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                if (selectedCharacterId == character.id) {
+                    downloadMessage = error.localizedMessage ?: I18n.t("model_download_failed")
+                }
             }
-            onModelAssetsChanged()
         }
     }
 
@@ -639,15 +669,18 @@ fun AssetImage(path: String?, reloadKey: Int = 0, modifier: Modifier, contentSca
     val appContext = context.applicationContext
     val cacheKey = path?.let { "asset:$MODEL_IMAGE_MAX_EDGE:$reloadKey:$it" }
     var bitmap by remember(cacheKey) { mutableStateOf(cacheKey?.let(ImageBitmapCache::get)) }
-    LaunchedEffect(path, reloadKey) {
-        if (bitmap != null) return@LaunchedEffect
-        bitmap = path?.let {
+    LaunchedEffect(cacheKey) {
+        val key = cacheKey ?: return@LaunchedEffect
+        if (bitmap != null || ImageBitmapCache.isKnownMissing(key)) return@LaunchedEffect
+        val decoded = path?.let {
             withContext(Dispatchers.IO) {
                 SampledImageDecoder.decodeAsset(appContext, it, MODEL_IMAGE_MAX_EDGE)
                     ?: ZstModelArchive.readLogicalPath(appContext, it)
                         ?.let { bytes -> SampledImageDecoder.decodeBytes(bytes, MODEL_IMAGE_MAX_EDGE) }
             }
-        }?.also { decoded -> cacheKey?.let { ImageBitmapCache.put(it, decoded) } }
+        }
+        if (decoded == null) ImageBitmapCache.markMissing(key) else ImageBitmapCache.put(key, decoded)
+        bitmap = decoded
     }
     if (bitmap != null) {
         androidx.compose.foundation.Image(bitmap = bitmap!!, contentDescription = null, modifier = modifier, contentScale = contentScale)

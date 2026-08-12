@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +83,9 @@ import com.bandori.pet.saveWallpaperBackgroundUri
 import com.bandori.pet.setWallpaperEnabled
 import com.bandori.pet.wallpaper.Live2DWallpaperService
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -214,10 +218,13 @@ internal fun LlmSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val appContext = context.applicationContext
     var draft by remember { mutableStateOf(LlmSettings.load(appContext)) }
+    var maxTokensText by remember { mutableStateOf(draft.maxTokens.toString()) }
     var apiKeyVisible by remember { mutableStateOf(false) }
     var thinkingMenuExpanded by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var confirmClearAll by remember { mutableStateOf(false) }
+    var clearAllFailed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -342,12 +349,13 @@ internal fun LlmSettingsScreen(onBack: () -> Unit) {
                     )
                 }
                 OutlinedTextField(
-                    value = draft.maxTokens.toString(),
+                    value = maxTokensText,
                     onValueChange = { value ->
-                        value.filter(Char::isDigit).toIntOrNull()?.let {
-                            draft = draft.copy(maxTokens = it.coerceIn(1, 32_768))
-                            saved = false
+                        maxTokensText = value.filter(Char::isDigit).take(5)
+                        maxTokensText.toIntOrNull()?.takeIf { it in 1..32_768 }?.let { maxTokens ->
+                            draft = draft.copy(maxTokens = maxTokens)
                         }
+                        saved = false
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(I18n.t("settings_llm_max_tokens")) },
@@ -357,11 +365,15 @@ internal fun LlmSettingsScreen(onBack: () -> Unit) {
                 Button(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = draft.baseUrl.trim().let { it.startsWith("http://") || it.startsWith("https://") } &&
-                        draft.apiKey.isNotBlank() && draft.model.isNotBlank(),
+                        draft.apiKey.isNotBlank() && draft.model.isNotBlank() &&
+                        maxTokensText.toIntOrNull()?.let { it in 1..32_768 } == true,
                     onClick = {
-                        draft = draft.normalized()
-                        draft.save(appContext)
-                        saved = true
+                        maxTokensText.toIntOrNull()?.let { maxTokens ->
+                            draft = draft.copy(maxTokens = maxTokens).normalized()
+                            maxTokensText = draft.maxTokens.toString()
+                            draft.save(appContext)
+                            saved = true
+                        }
                     },
                 ) { Text(if (saved) I18n.t("settings_llm_saved") else I18n.t("settings_llm_save")) }
                 TextButton(modifier = Modifier.fillMaxWidth(), onClick = { confirmClearAll = true }) {
@@ -380,11 +392,27 @@ internal fun LlmSettingsScreen(onBack: () -> Unit) {
             text = { Text(I18n.t("settings_llm_clear_all_confirm")) },
             confirmButton = {
                 TextButton(onClick = {
-                    ChatHistoryRepository(appContext).clearAll()
                     confirmClearAll = false
+                    scope.launch {
+                        val cleared = withContext(Dispatchers.IO) {
+                            runCatching { ChatHistoryRepository(appContext).clearAll() }.isSuccess
+                        }
+                        clearAllFailed = !cleared
+                    }
                 }) { Text(I18n.t("confirm")) }
             },
             dismissButton = { TextButton(onClick = { confirmClearAll = false }) { Text(I18n.t("cancel")) } },
+        )
+    }
+
+    if (clearAllFailed) {
+        AlertDialog(
+            onDismissRequest = { clearAllFailed = false },
+            title = { Text(I18n.t("settings_llm_clear_all")) },
+            text = { Text(I18n.t("chat_history_delete_failed")) },
+            confirmButton = {
+                TextButton(onClick = { clearAllFailed = false }) { Text(I18n.t("confirm")) }
+            },
         )
     }
 }

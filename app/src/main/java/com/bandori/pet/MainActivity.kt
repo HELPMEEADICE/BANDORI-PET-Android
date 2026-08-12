@@ -56,6 +56,7 @@ import com.bandori.pet.ui.live2d.Live2DScreen
 import com.bandori.pet.ui.model.ModelScreen
 import com.bandori.pet.ui.settings.SettingsScreen
 import com.bandori.pet.ui.theme.BandoriPetTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -148,8 +149,14 @@ fun BandoriPetApp(
         val character = appData?.characters?.get(characterId)
         val generation = modelSelectionGeneration.incrementAndGet()
         scope.launch {
-            val model = withContext(Dispatchers.IO) {
-                character?.let(repository::availableModels)?.firstOrNull()
+            val model = try {
+                withContext(Dispatchers.IO) {
+                    character?.let(repository::availableModels)?.firstOrNull()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                null
             }
             if (generation == modelSelectionGeneration.get() && selectedCharacterId == characterId) {
                 selectCharacterModel(characterId, model)
@@ -158,8 +165,11 @@ fun BandoriPetApp(
     }
 
     LaunchedEffect(modelAssetsVersion) {
-        val data = withContext(Dispatchers.IO) { repository.load() }
+        val reloadGeneration = modelSelectionGeneration.incrementAndGet()
+        val data = runCatching { withContext(Dispatchers.IO) { repository.load() } }
+            .getOrNull() ?: return@LaunchedEffect
         appData = data
+        if (reloadGeneration != modelSelectionGeneration.get()) return@LaunchedEffect
         val activeCharacterId = when {
             data.characters.containsKey(selectedCharacterId) -> selectedCharacterId
             data.characters.containsKey("kasumi") -> "kasumi"
@@ -170,9 +180,19 @@ fun BandoriPetApp(
         } ?: selectedCharacterId
         selectedCharacterId = activeCharacterId
         selectedBandId = data.bands.firstOrNull { activeCharacterId in it.characters }?.id ?: data.bands.firstOrNull()?.id
-        val models = withContext(Dispatchers.IO) {
-            data.characters[activeCharacterId]?.let { repository.availableModels(it) }.orEmpty()
+        val models = try {
+            withContext(Dispatchers.IO) {
+                data.characters[activeCharacterId]?.let { repository.availableModels(it) }.orEmpty()
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            return@LaunchedEffect
         }
+        if (
+            reloadGeneration != modelSelectionGeneration.get() ||
+            selectedCharacterId != activeCharacterId
+        ) return@LaunchedEffect
         val restoredModel = selectedModel?.takeIf { current ->
             current.characterId == activeCharacterId && models.any { it.modelAssetPath == current.modelAssetPath }
         }

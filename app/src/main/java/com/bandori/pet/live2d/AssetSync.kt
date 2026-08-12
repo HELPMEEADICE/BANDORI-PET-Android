@@ -81,13 +81,12 @@ object AssetSync {
 
     private fun collectAssetFiles(context: Context, assetPath: String, targetFile: File, result: MutableMap<String, ByteArray>) {
         val entries = context.assets.list(assetPath)
-        if (entries == null) {
+        if (entries.isNullOrEmpty()) {
             runCatching {
                 result[targetFile.absolutePath] = context.assets.open(assetPath).use { it.readBytes() }
             }
             return
         }
-        if (entries.isEmpty()) return
         for (entry in entries) {
             collectAssetFiles(context, "$assetPath/$entry", File(targetFile, entry), result)
         }

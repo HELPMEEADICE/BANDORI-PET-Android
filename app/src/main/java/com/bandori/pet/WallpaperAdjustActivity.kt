@@ -139,6 +139,7 @@ private fun WallpaperAdjustScreen(onClose: () -> Unit) {
                     view.setTransform(transform.value)
                     view.setModel(selectedModel)
                 },
+                onRelease = Live2DRenderView::release,
             )
         }
 

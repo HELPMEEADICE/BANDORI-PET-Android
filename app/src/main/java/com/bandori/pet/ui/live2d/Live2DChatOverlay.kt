@@ -57,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -366,8 +367,7 @@ private fun ChatPanelContent(
                     keyboardActions = KeyboardActions(onSend = {
                         val message = input.value
                         if (message.isNotBlank()) {
-                            viewModel.send(model, message)
-                            input.value = ""
+                            if (viewModel.send(model, message)) input.value = ""
                         }
                     }),
                     shape = RoundedCornerShape(22.dp),
@@ -379,8 +379,7 @@ private fun ChatPanelContent(
                         if (state.isGenerating) {
                             viewModel.stop()
                         } else if (message.isNotBlank()) {
-                            viewModel.send(model, message)
-                            input.value = ""
+                            if (viewModel.send(model, message)) input.value = ""
                         }
                     },
                     enabled = state.isGenerating || input.value.isNotBlank(),
@@ -556,9 +555,11 @@ private fun ChatMessageList(
     val listState = rememberLazyListState()
     val itemCount = messages.size + if (streamingText.isNotBlank() || thinking) 1 else 0
     val streamScrollBucket = streamingText.length / 24
+    var previousItemCount by remember { mutableIntStateOf(0) }
     LaunchedEffect(itemCount, streamScrollBucket) {
         val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-        val wasNearBottom = lastVisibleIndex < 0 || lastVisibleIndex >= itemCount - 2
+        val wasNearBottom = shouldFollowNewChatContent(previousItemCount, lastVisibleIndex)
+        previousItemCount = itemCount
         if (itemCount > 0 && wasNearBottom) listState.scrollToItem(itemCount - 1)
     }
     LazyColumn(
@@ -580,6 +581,9 @@ private fun ChatMessageList(
         }
     }
 }
+
+internal fun shouldFollowNewChatContent(previousItemCount: Int, lastVisibleIndex: Int): Boolean =
+    previousItemCount <= 0 || lastVisibleIndex < 0 || lastVisibleIndex >= previousItemCount - 2
 
 @Composable
 private fun ChatBubble(role: String, content: String, thinking: Boolean = false) {

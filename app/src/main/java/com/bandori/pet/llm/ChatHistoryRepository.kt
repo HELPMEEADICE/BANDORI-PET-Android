@@ -91,14 +91,16 @@ class ChatHistoryRepository internal constructor(
 
     @Synchronized
     fun clearCharacter(characterId: String) {
-        legacyFile(characterId).delete()
-        characterDirectory(characterId).deleteRecursively()
+        val legacy = legacyFile(characterId)
+        check(!legacy.exists() || legacy.delete()) { "Cannot delete legacy chat history" }
+        val directory = characterDirectory(characterId)
+        check(!directory.exists() || directory.deleteRecursively()) { "Cannot delete character chat history" }
         setActiveConversation(characterId, null)
     }
 
     @Synchronized
     fun clearAll() {
-        root.deleteRecursively()
+        check(!root.exists() || root.deleteRecursively()) { "Cannot delete chat history" }
     }
 
     private fun ensureLegacyMigrated(characterId: String) {

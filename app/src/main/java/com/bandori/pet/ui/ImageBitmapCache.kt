@@ -17,17 +17,27 @@ internal object ImageBitmapCache {
                 .coerceAtMost(Int.MAX_VALUE.toLong())
                 .toInt()
     }
+    private val missing = LruCache<String, Boolean>(MAX_MISSING_ENTRIES)
 
     operator fun get(key: String): ImageBitmap? = cache.get(key)
 
     fun put(key: String, bitmap: ImageBitmap) {
+        missing.remove(key)
         cache.put(key, bitmap)
+    }
+
+    fun isKnownMissing(key: String): Boolean = missing.get(key) == true
+
+    fun markMissing(key: String) {
+        if (cache.get(key) == null) missing.put(key, true)
     }
 
     private fun cacheSizeKb(): Int =
         (Runtime.getRuntime().maxMemory() / 1024L / 16L)
             .coerceIn(8L * 1024L, 32L * 1024L)
             .toInt()
+
+    private const val MAX_MISSING_ENTRIES = 256
 }
 
 /** Decodes UI images close to their display size to avoid large allocations and upload stalls. */

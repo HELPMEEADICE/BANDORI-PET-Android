@@ -13,6 +13,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +53,10 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
 
     fun selectCharacter(model: ModelChoice, force: Boolean = false) {
         val current = mutableState.value
-        if (current.characterId == model.characterId && (!force || current.isGenerating)) return
+        if (
+            current.characterId == model.characterId &&
+            (!force || current.isGenerating || current.isHistoryLoading)
+        ) return
         mutableState.value = if (current.characterId == model.characterId) {
             current.copy(isHistoryLoading = true, error = null)
         } else {
@@ -60,9 +64,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         }
         launchTransition {
             stopRequestAndJoin()
-            val snapshot = runCatching {
-                withContext(Dispatchers.IO) { history.loadSnapshot(model.characterId) }
-            }.getOrElse {
+            val snapshot = runIoCatching { history.loadSnapshot(model.characterId) }.getOrElse {
                 mutableState.value = ChatUiState(characterId = model.characterId, error = ERROR_HISTORY_LOAD)
                 return@launchTransition
             }
@@ -75,9 +77,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         mutableState.value = mutableState.value.copy(isHistoryLoading = true, error = null)
         launchTransition {
             stopRequestAndJoin()
-            val conversations = runCatching {
-                withContext(Dispatchers.IO) { history.listConversations(characterId) }
-            }.getOrElse {
+            val conversations = runIoCatching { history.listConversations(characterId) }.getOrElse {
                 mutableState.value = mutableState.value.copy(isHistoryLoading = false, error = ERROR_HISTORY_LOAD)
                 return@launchTransition
             }
@@ -91,13 +91,11 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         mutableState.value = mutableState.value.copy(isHistoryLoading = true, error = null)
         launchTransition {
             stopRequestAndJoin()
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    val conversation = history.loadConversation(characterId, conversationId)
-                        ?: error("Conversation not found")
-                    history.setActiveConversation(characterId, conversationId)
-                    conversation to history.listConversations(characterId)
-                }
+            val result = runIoCatching {
+                val conversation = history.loadConversation(characterId, conversationId)
+                    ?: error("Conversation not found")
+                history.setActiveConversation(characterId, conversationId)
+                conversation to history.listConversations(characterId)
             }.getOrElse {
                 mutableState.value = mutableState.value.copy(isHistoryLoading = false, error = ERROR_HISTORY_LOAD)
                 return@launchTransition
@@ -114,18 +112,16 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         launchTransition {
             stopRequestAndJoin()
             val wasActive = mutableState.value.conversationId == conversationId
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    check(history.deleteConversation(characterId, conversationId))
-                    val conversations = history.listConversations(characterId)
-                    val replacement = if (wasActive) {
-                        conversations.firstOrNull()?.let { history.loadConversation(characterId, it.id) }
-                    } else {
-                        null
-                    }
-                    if (wasActive) history.setActiveConversation(characterId, replacement?.id)
-                    conversations to replacement
+            val result = runIoCatching {
+                check(history.deleteConversation(characterId, conversationId))
+                val conversations = history.listConversations(characterId)
+                val replacement = if (wasActive) {
+                    conversations.firstOrNull()?.let { history.loadConversation(characterId, it.id) }
+                } else {
+                    null
                 }
+                if (wasActive) history.setActiveConversation(characterId, replacement?.id)
+                conversations to replacement
             }.getOrElse {
                 mutableState.value = mutableState.value.copy(isHistoryLoading = false, error = ERROR_HISTORY_DELETE)
                 return@launchTransition
@@ -140,7 +136,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun send(model: ModelChoice, input: String) {
+    fun send(model: ModelChoice, input: String): Boolean {
         val text = input.trim()
         val current = mutableState.value
         if (
@@ -148,8 +144,9 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             requestJob?.isActive == true ||
             current.isHistoryLoading ||
             current.characterId != model.characterId
-        ) return
+        ) return false
         startRequest(model, text, appendUser = true)
+        return true
     }
 
     fun retry(model: ModelChoice) {
@@ -173,7 +170,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         mutableState.value = mutableState.value.copy(isHistoryLoading = true, error = null)
         launchTransition {
             stopRequestAndJoin()
-            val cleared = runCatching { withContext(Dispatchers.IO) { history.clearAll() } }.isSuccess
+            val cleared = runIoCatching { history.clearAll() }.isSuccess
             val characterId = mutableState.value.characterId
             lastFailedRequest = null
             mutableState.value = ChatUiState(
@@ -209,12 +206,10 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
                 messages = messages,
             )
 
-            val conversations = runCatching {
-                withContext(Dispatchers.IO) {
-                    history.saveConversation(requestContext.toConversation(messages))
-                    history.setActiveConversation(model.characterId, conversationId)
-                    history.listConversations(model.characterId)
-                }
+            val conversations = runIoCatching {
+                history.saveConversation(requestContext.toConversation(messages))
+                history.setActiveConversation(model.characterId, conversationId)
+                history.listConversations(model.characterId)
             }.getOrElse {
                 mutableState.value = current.copy(
                     conversationId = conversationId,
@@ -244,24 +239,74 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             val parser = ActionTagParser(characterPrompt.allowedActionTags)
             mutableState.value = mutableState.value.copy(isGenerating = true)
             lastFailedRequest = null
+            var latestStreamingText = ""
+            val pendingParserText = StringBuilder()
+            var lastStreamingPublishAt = 0L
+            var pendingStreamingUpdate: Job? = null
+
+            fun flushParserText() {
+                if (pendingParserText.isEmpty()) return
+                latestStreamingText = parser.consume(pendingParserText.toString())
+                pendingParserText.setLength(0)
+            }
+
+            fun publishStreamingText() {
+                val now = System.nanoTime() / 1_000_000L
+                val elapsed = now - lastStreamingPublishAt
+                if (lastStreamingPublishAt == 0L || elapsed >= STREAMING_UI_UPDATE_INTERVAL_MS) {
+                    flushParserText()
+                    pendingStreamingUpdate?.cancel()
+                    pendingStreamingUpdate = null
+                    lastStreamingPublishAt = now
+                    if (isActive(requestContext)) {
+                        mutableState.value = mutableState.value.copy(
+                            streamingText = latestStreamingText,
+                            isThinking = false,
+                        )
+                    }
+                } else if (pendingStreamingUpdate?.isActive != true) {
+                    pendingStreamingUpdate = launch {
+                        delay((STREAMING_UI_UPDATE_INTERVAL_MS - elapsed).coerceAtLeast(1L))
+                        if (isActive(requestContext)) {
+                            flushParserText()
+                            lastStreamingPublishAt = System.nanoTime() / 1_000_000L
+                            mutableState.value = mutableState.value.copy(
+                                streamingText = latestStreamingText,
+                                isThinking = false,
+                            )
+                        }
+                    }
+                }
+            }
+
             try {
                 client.streamCompletion(settings, settings.systemPromptWithCustom(characterPrompt.text), messages).collect { event ->
                     if (!isActive(requestContext)) return@collect
                     when (event) {
-                        is LlmStreamEvent.Content -> mutableState.value = mutableState.value.copy(
-                            streamingText = parser.consume(event.text),
-                            isThinking = false,
-                        )
+                        is LlmStreamEvent.Content -> {
+                            pendingParserText.append(event.text)
+                            publishStreamingText()
+                        }
                         LlmStreamEvent.ReasoningStarted -> mutableState.value = mutableState.value.copy(isThinking = true)
                     }
                 }
+                pendingStreamingUpdate?.cancel()
+                flushParserText()
                 finalizeAssistant(requestContext, parser)
             } catch (cancelled: CancellationException) {
-                withContext(NonCancellable) { finalizeAssistant(requestContext, parser) }
+                pendingStreamingUpdate?.cancel()
+                withContext(NonCancellable) {
+                    flushParserText()
+                    finalizeAssistant(requestContext, parser)
+                }
                 throw cancelled
             } catch (error: Throwable) {
+                pendingStreamingUpdate?.cancel()
                 if (!currentCoroutineContext().isActive) {
-                    withContext(NonCancellable) { finalizeAssistant(requestContext, parser) }
+                    withContext(NonCancellable) {
+                        flushParserText()
+                        finalizeAssistant(requestContext, parser)
+                    }
                     return@launch
                 }
                 lastFailedRequest = FailedRequest(
@@ -291,11 +336,9 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         val updatedRequest = request.copy(
             updatedAt = if (result.text.isNotBlank()) System.currentTimeMillis() else request.updatedAt,
         )
-        val conversations = runCatching {
-            withContext(Dispatchers.IO) {
-                history.saveConversation(updatedRequest.toConversation(finalMessages))
-                history.listConversations(request.characterId)
-            }
+        val conversations = runIoCatching {
+            history.saveConversation(updatedRequest.toConversation(finalMessages))
+            history.listConversations(request.characterId)
         }.getOrElse {
             if (isActive(request)) {
                 mutableState.value = mutableState.value.copy(
@@ -331,6 +374,14 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     private fun launchTransition(block: suspend () -> Unit) {
         transitionJob?.cancel()
         transitionJob = viewModelScope.launch { block() }
+    }
+
+    private suspend fun <T> runIoCatching(block: () -> T): Result<T> = try {
+        Result.success(withContext(Dispatchers.IO) { block() })
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        Result.failure(error)
     }
 
     private suspend fun stopRequestAndJoin() {
@@ -379,6 +430,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         const val ERROR_HISTORY_LOAD = "CHAT_HISTORY_LOAD_FAILED"
         const val ERROR_HISTORY_SAVE = "CHAT_HISTORY_SAVE_FAILED"
         const val ERROR_HISTORY_DELETE = "CHAT_HISTORY_DELETE_FAILED"
+        private const val STREAMING_UI_UPDATE_INTERVAL_MS = 32L
     }
 }
 

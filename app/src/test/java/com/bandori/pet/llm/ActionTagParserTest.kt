@@ -30,4 +30,20 @@ class ActionTagParserTest {
         assertEquals("普通回答", result.text)
         assertNull(result.action)
     }
+
+    @Test
+    fun nestedOpeningBracketKeepsTextAndStillFindsKnownTag() {
+        val parser = ActionTagParser(setOf("smile"))
+        assertEquals("[", parser.consume("[[smile]"))
+        val result = parser.finish()
+        assertEquals("[", result.text)
+        assertEquals("smile", result.action)
+    }
+
+    @Test
+    fun truncatedKnownTagDoesNotLeakProtocolText() {
+        val parser = ActionTagParser(setOf("smile"))
+        assertEquals("回答", parser.consume("回答[smi"))
+        assertEquals("回答", parser.finish().text)
+    }
 }

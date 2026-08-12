@@ -6,6 +6,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val releaseStorePath = providers.gradleProperty("BANDORI_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.gradleProperty("BANDORI_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.gradleProperty("BANDORI_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.gradleProperty("BANDORI_RELEASE_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    releaseStorePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.bandori.pet"
     compileSdk = 35
@@ -29,11 +40,13 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = rootProject.file("bandori.jks")
-            storePassword = "bandori123"
-            keyAlias = "bandori"
-            keyPassword = "bandori123"
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -43,7 +56,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

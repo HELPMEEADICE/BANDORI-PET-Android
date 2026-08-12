@@ -2,40 +2,64 @@ package com.bandori.pet.llm
 
 class ActionTagParser(tags: Set<String>) {
     private val allowed = tags.map { it.lowercase() }.toSet()
-    private val raw = StringBuilder()
+    private val visible = StringBuilder()
+    private var pendingTag: StringBuilder? = null
+    private var firstAction: String? = null
 
     fun consume(text: String): String {
-        raw.append(text)
-        return sanitized(final = false).text
+        text.forEach(::consumeCharacter)
+        return visible.toString().trimStart()
     }
 
-    fun finish(): Result = sanitized(final = true)
+    fun finish(): Result {
+        // A retained partial tag is a prefix of a supported action. Keep it hidden
+        // instead of exposing protocol text at the end of a truncated response.
+        pendingTag = null
+        return Result(text = visible.toString().trim(), action = firstAction)
+    }
 
-    private fun sanitized(final: Boolean): Result {
-        var firstAction: String? = null
-        val visible = TAG_REGEX.replace(raw.toString()) { match ->
-            val tag = match.groupValues[1]
-            if (tag.lowercase() in allowed) {
-                if (firstAction == null) firstAction = tag
-                ""
+    private fun consumeCharacter(character: Char) {
+        val pending = pendingTag
+        if (pending == null) {
+            if (character == '[' && allowed.isNotEmpty()) {
+                pendingTag = StringBuilder("[")
             } else {
-                match.value
+                visible.append(character)
+            }
+            return
+        }
+
+        when {
+            character == ']' -> {
+                val token = pending.substring(1)
+                if (token.lowercase() in allowed) {
+                    if (firstAction == null) firstAction = token
+                } else {
+                    visible.append(pending).append(character)
+                }
+                pendingTag = null
+            }
+            character == '[' -> {
+                visible.append(pending)
+                pendingTag = StringBuilder("[")
+            }
+            character.isTagCharacter() -> {
+                pending.append(character)
+                val token = pending.substring(1).lowercase()
+                if (allowed.none { it.startsWith(token) }) {
+                    visible.append(pending)
+                    pendingTag = null
+                }
+            }
+            else -> {
+                visible.append(pending).append(character)
+                pendingTag = null
             }
         }
-        val safeVisible = holdIncompleteTag(visible)
-        return Result(
-            text = if (final) safeVisible.trim() else safeVisible.trimStart(),
-            action = firstAction,
-        )
     }
 
-    private fun holdIncompleteTag(value: String): String {
-        val start = value.lastIndexOf('[')
-        if (start < 0 || value.indexOf(']', start) >= 0) return value
-        val token = value.substring(start + 1)
-        if (!token.matches(Regex("[A-Za-z0-9_.]*"))) return value
-        return if (allowed.any { it.startsWith(token.lowercase()) }) value.substring(0, start) else value
-    }
+    private fun Char.isTagCharacter(): Boolean =
+        this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' || this == '_' || this == '.'
 
     data class Result(val text: String, val action: String?)
 

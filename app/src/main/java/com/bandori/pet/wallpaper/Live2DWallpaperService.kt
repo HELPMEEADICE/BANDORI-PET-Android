@@ -8,7 +8,16 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.KEY_FPS_DISPLAY_ENABLED
+import com.bandori.pet.KEY_FPS_LIMIT
 import com.bandori.pet.KEY_RENDER_RESOLUTION
+import com.bandori.pet.KEY_SELECTED_CHARACTER_ID
+import com.bandori.pet.KEY_SELECTED_MODEL_ASSET_PATH
+import com.bandori.pet.KEY_VSYNC_ENABLED
+import com.bandori.pet.KEY_WALLPAPER_BACKGROUND_URI
+import com.bandori.pet.KEY_WALLPAPER_ENABLED
+import com.bandori.pet.KEY_WALLPAPER_OFFSET_X
+import com.bandori.pet.KEY_WALLPAPER_OFFSET_Y
+import com.bandori.pet.KEY_WALLPAPER_SCALE
 import com.bandori.pet.SETTINGS_PREFS
 import com.bandori.pet.isWallpaperEnabled
 import com.bandori.pet.loadPersistedModelChoice
@@ -16,11 +25,15 @@ import com.bandori.pet.loadWallpaperBackgroundUri
 import com.bandori.pet.loadWallpaperTransform
 import com.bandori.pet.live2d.AssetSync
 import com.bandori.pet.live2d.NativeLive2D
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 class Live2DWallpaperService : WallpaperService() {
@@ -38,17 +51,33 @@ class Live2DWallpaperService : WallpaperService() {
         private var loadGeneration = 0
         private var surfaceHolderRef: SurfaceHolder? = null
         private var settingsPreferences: SharedPreferences? = null
+        private var restartJob: Job? = null
         private val renderSettingsListener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
-            if (handle != 0L) {
+            scope.launch {
                 when (key) {
                     KEY_FPS_DISPLAY_ENABLED -> {
-                        NativeLive2D.setFpsDisplayEnabled(
-                            handle,
-                            preferences.getBoolean(KEY_FPS_DISPLAY_ENABLED, false),
-                        )
+                        if (handle != 0L) {
+                            NativeLive2D.setFpsDisplayEnabled(
+                                handle,
+                                preferences.getBoolean(KEY_FPS_DISPLAY_ENABLED, false),
+                            )
+                        }
                     }
                     KEY_RENDER_RESOLUTION -> {
-                        NativeLive2D.setRenderScale(handle, RenderSettings.load(applicationContext).renderResolution.scale)
+                        if (handle != 0L) {
+                            NativeLive2D.setRenderScale(handle, RenderSettings.load(applicationContext).renderResolution.scale)
+                        }
+                    }
+                    KEY_FPS_LIMIT, KEY_VSYNC_ENABLED -> if (handle != 0L) {
+                        val settings = RenderSettings.load(applicationContext)
+                        NativeLive2D.setRenderOptions(handle, settings.fpsLimit, settings.vsyncEnabled)
+                    }
+                    KEY_WALLPAPER_OFFSET_X, KEY_WALLPAPER_OFFSET_Y, KEY_WALLPAPER_SCALE -> applyWallpaperTransform()
+                    KEY_SELECTED_CHARACTER_ID,
+                    KEY_SELECTED_MODEL_ASSET_PATH,
+                    KEY_WALLPAPER_BACKGROUND_URI -> scheduleRendererRestart()
+                    KEY_WALLPAPER_ENABLED -> {
+                        if (isWallpaperEnabled(applicationContext)) ensureRenderer() else stopRenderer()
                     }
                 }
             }
@@ -65,6 +94,7 @@ class Live2DWallpaperService : WallpaperService() {
         }
 
         override fun onDestroy() {
+            restartJob?.cancel()
             surfaceHolderRef?.removeCallback(this)
             settingsPreferences?.unregisterOnSharedPreferenceChangeListener(renderSettingsListener)
             settingsPreferences = null
@@ -119,57 +149,78 @@ class Live2DWallpaperService : WallpaperService() {
                 stopRenderer()
                 return
             }
-            val surface = surfaceHolderRef?.surface ?: return
-            if (!surface.isValid) return
-            val model = runCatching { loadPersistedModelChoice(applicationContext) }
-                .onFailure { Log.e("BandoriPet", "Failed to load wallpaper model", it) }
-                .getOrNull() ?: return
-            val settings = RenderSettings.load(applicationContext)
-            val wallpaperBackgroundUri = loadWallpaperBackgroundUri(applicationContext)
+            if (surfaceHolderRef?.surface?.isValid != true) return
             val generation = ++loadGeneration
             loading = true
             scope.launch {
-                val prepared = runCatching { AssetSync.prepareModel(applicationContext, model.modelAssetPath) }
-                    .onFailure { Log.e("BandoriPet", "Failed to prepare wallpaper model", it) }
-                    .getOrNull()
-                if (prepared != null) {
-                    if (generation == loadGeneration && visible && surfaceReady) {
-                        val background = NativeLive2D.loadBackground(applicationContext, wallpaperBackgroundUri)
-                        val activeSurface = surfaceHolderRef?.surface
-                        if (generation != loadGeneration || !visible || !surfaceReady || activeSurface?.isValid != true) {
-                            loading = false
-                            return@launch
-                        }
-                        if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
-                            destroyHandle()
-                            runtimeRoot = prepared.runtimeRoot
-                            handle = NativeLive2D.create(
-                                activeSurface,
-                                prepared.runtimeRoot,
-                                width,
-                                height,
-                                settings.fpsLimit,
-                                settings.vsyncEnabled,
-                                settings.renderResolution.scale,
-                            )
-                            NativeLive2D.setBackground(handle, background)
-                            applyWallpaperTransform()
-                        } else {
-                            NativeLive2D.setRenderOptions(handle, settings.fpsLimit, settings.vsyncEnabled)
-                            NativeLive2D.setBackground(handle, background)
-                        }
-                        if (handle != 0L) {
-                            NativeLive2D.setFpsDisplayEnabled(handle, settings.fpsDisplayEnabled)
-                            NativeLive2D.loadModel(
-                                handle,
-                                prepared.modelPath,
-                                prepared.resourcePaths.toTypedArray(),
-                                prepared.resourceBytes.toTypedArray(),
-                            )
-                        }
+                try {
+                    val model = loadStep("Failed to load wallpaper model") {
+                        withContext(Dispatchers.IO) { loadPersistedModelChoice(applicationContext) }
+                    } ?: return@launch
+                    val prepared = loadStep("Failed to prepare wallpaper model") {
+                        AssetSync.prepareModel(applicationContext, model.modelAssetPath)
+                    } ?: return@launch
+                    val wallpaperBackgroundUri = withContext(Dispatchers.IO) {
+                        loadWallpaperBackgroundUri(applicationContext)
                     }
+                    val background = NativeLive2D.loadBackground(applicationContext, wallpaperBackgroundUri)
+                    val activeSurface = surfaceHolderRef?.surface
+                    if (
+                        generation != loadGeneration ||
+                        !visible ||
+                        !surfaceReady ||
+                        activeSurface?.isValid != true
+                    ) return@launch
+
+                    val settings = RenderSettings.load(applicationContext)
+                    if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
+                        destroyHandle()
+                        runtimeRoot = prepared.runtimeRoot
+                        handle = NativeLive2D.create(
+                            activeSurface,
+                            prepared.runtimeRoot,
+                            width,
+                            height,
+                            settings.fpsLimit,
+                            settings.vsyncEnabled,
+                            settings.renderResolution.scale,
+                        )
+                        NativeLive2D.setBackground(handle, background)
+                        applyWallpaperTransform()
+                    } else {
+                        NativeLive2D.setRenderOptions(handle, settings.fpsLimit, settings.vsyncEnabled)
+                        NativeLive2D.setBackground(handle, background)
+                    }
+                    if (handle != 0L) {
+                        NativeLive2D.setFpsDisplayEnabled(handle, settings.fpsDisplayEnabled)
+                        NativeLive2D.loadModel(
+                            handle,
+                            prepared.modelPath,
+                            prepared.resourcePaths.toTypedArray(),
+                            prepared.resourceBytes.toTypedArray(),
+                        )
+                    }
+                } finally {
+                    if (generation == loadGeneration) loading = false
                 }
-                loading = false
+            }
+        }
+
+        private suspend fun <T> loadStep(message: String, block: suspend () -> T): T? = try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            Log.e(TAG, message, error)
+            null
+        }
+
+        private fun scheduleRendererRestart() {
+            restartJob?.cancel()
+            restartJob = scope.launch {
+                delay(RESTART_DEBOUNCE_MS)
+                stopRenderer()
+                ensureRenderer()
             }
         }
 
@@ -192,5 +243,11 @@ class Live2DWallpaperService : WallpaperService() {
                 runtimeRoot = null
             }
         }
+
+    }
+
+    private companion object {
+        const val TAG = "BandoriPetWallpaper"
+        const val RESTART_DEBOUNCE_MS = 50L
     }
 }

@@ -186,6 +186,10 @@ Gradle sync 任务会自动将其复制到 APK assets 中（排除 `.git`、`ven
 .\gradlew.bat assembleDebug
 ```
 
+发布签名不再写入仓库。需要签名的 Release APK 时，请在用户级 `gradle.properties` 中配置
+`BANDORI_RELEASE_STORE_FILE`、`BANDORI_RELEASE_STORE_PASSWORD`、
+`BANDORI_RELEASE_KEY_ALIAS` 和 `BANDORI_RELEASE_KEY_PASSWORD`；未配置时仍可生成未签名的 Release APK。
+
 ### Android Studio
 
 1. 用 Android Studio 打开项目根目录

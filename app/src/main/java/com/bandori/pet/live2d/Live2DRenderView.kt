@@ -7,6 +7,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
+import android.view.View
 import com.bandori.pet.I18n
 import com.bandori.pet.RenderResolution
 import com.bandori.pet.data.ModelChoice
@@ -167,6 +168,11 @@ class Live2DRenderView @JvmOverloads constructor(
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        setRenderingActive(visibility == View.VISIBLE)
+    }
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         cancelInteractiveTransform()
@@ -362,7 +368,7 @@ class Live2DRenderView @JvmOverloads constructor(
 
     private fun dispatchPendingAction() {
         val action = pendingAction ?: return
-        if (handle == 0L) return
+        if (handle == 0L || loadedModel != selectedModel) return
         pendingAction = null
         NativeLive2D.playAction(handle, action)
     }
