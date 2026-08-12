@@ -114,6 +114,8 @@ struct Renderer {
     std::atomic<float> transformOffsetX{0.0f};
     std::atomic<float> transformOffsetY{0.0f};
     std::atomic<float> transformScale{1.0f};
+    std::atomic<float> mouthOpen{0.0f};
+    std::atomic<float> mouthForm{0.0f};
     GLuint backgroundTexture = 0;
     GLuint backgroundProgram = 0;
     GLuint backgroundBuffer = 0;
@@ -1160,10 +1162,22 @@ function __bp_clear()
     gl.glClear(0x4000)
 end
 
-function __bp_draw(time_msec)
+function __bp_draw(time_msec, mouth_open, mouth_form)
     if not renderer then return end
     gl.glViewport(0, 0, width, height)
-    renderer:draw({ clear = false, time_msec = time_msec })
+    local parameters
+    if model_is_moc3 then
+        parameters = {
+            { id = "ParamMouthOpenY", value = tonumber(mouth_open) or 0, weight = 1 },
+            { id = "ParamMouthForm", value = tonumber(mouth_form) or 0, weight = 1 },
+        }
+    else
+        parameters = {
+            { id = "PARAM_MOUTH_OPEN_Y", value = tonumber(mouth_open) or 0, weight = 1 },
+            { id = "PARAM_MOUTH_FORM", value = tonumber(mouth_form) or 0, weight = 1 },
+        }
+    end
+    renderer:draw({ clear = false, time_msec = time_msec, parameters = parameters })
     if active_motion_kind == "action" and is_motion_finished() then
         start_default_motion()
     end
@@ -1305,7 +1319,9 @@ static void renderLoop(Renderer* renderer) {
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
         const auto timeMs = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
         renderer->luaApi.pushNumber(renderer->lua, static_cast<double>(timeMs));
-        callLua(renderer, "__bp_draw", 1);
+        renderer->luaApi.pushNumber(renderer->lua, renderer->mouthOpen.load());
+        renderer->luaApi.pushNumber(renderer->lua, renderer->mouthForm.load());
+        callLua(renderer, "__bp_draw", 3);
         drawFps(renderer, measuredFps);
         if (eglSwapBuffers(renderer->display, renderer->surface) == EGL_TRUE) {
             ++framesSinceFpsSample;
@@ -1536,6 +1552,14 @@ Java_com_bandori_pet_live2d_NativeLive2D_playAction(JNIEnv* env, jobject, jlong 
         renderer->pendingAction = tagChars != nullptr ? tagChars : "";
     }
     if (tagChars != nullptr) env->ReleaseStringUTFChars(tag, tagChars);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bandori_pet_live2d_NativeLive2D_setLipSync(JNIEnv*, jobject, jlong handle, jfloat open, jfloat form) {
+    auto* renderer = reinterpret_cast<Renderer*>(handle);
+    if (renderer == nullptr) return;
+    renderer->mouthOpen.store(std::clamp(static_cast<float>(open), 0.0f, 1.0f));
+    renderer->mouthForm.store(std::clamp(static_cast<float>(form), -1.0f, 1.0f));
 }
 
 extern "C" JNIEXPORT jstring JNICALL

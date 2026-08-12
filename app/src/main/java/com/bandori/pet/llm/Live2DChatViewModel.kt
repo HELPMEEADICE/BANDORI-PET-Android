@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.bandori.pet.companion.CompanionConnectionState
+import com.bandori.pet.companion.CompanionSettings
 import com.bandori.pet.data.ModelChoice
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -23,6 +25,20 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+
+enum class ChatBackendMode { Local, Desktop }
+
+@Immutable
+data class CompanionCapabilities(
+    val privateHistory: Boolean = false,
+    val remoteChat: Boolean = false,
+    val tts: Boolean = false,
+    val actions: Boolean = false,
+    val llmStatus: String = "unconfigured",
+    val ttsStatus: String = "unconfigured",
+)
 
 @Immutable
 data class ChatUiState(
@@ -36,23 +52,116 @@ data class ChatUiState(
     val isThinking: Boolean = false,
     val isHistoryLoading: Boolean = false,
     val error: String? = null,
+    val backendMode: ChatBackendMode = ChatBackendMode.Local,
+    val companionConnection: CompanionConnectionState = CompanionConnectionState.Disconnected,
+    val companionCapabilities: CompanionCapabilities = CompanionCapabilities(),
+    val companionMode: String = "private",
 )
 
 class Live2DChatViewModel(application: Application) : AndroidViewModel(application) {
-    private val history = ChatHistoryRepository(application)
-    private val prompts = CharacterPromptRepository(application)
-    private val client = LlmChatClient()
+    private val localBackend = LocalChatBackend(application)
+    private val desktopBackend = DesktopCompanionBackend.shared(application)
+    private val history = localBackend.history
+    private val prompts = localBackend.prompts
+    private val client = localBackend.client
+    private val companionClient = desktopBackend.client
+    private val remoteTtsPlayer = desktopBackend.ttsPlayer
     private val mutableState = MutableStateFlow(ChatUiState())
     private val mutableActions = Channel<String>(Channel.BUFFERED)
     private var requestJob: Job? = null
     private var transitionJob: Job? = null
+    private var companionHydrationJob: Job? = null
     private var lastFailedRequest: FailedRequest? = null
+    private var selectedLocalModel: ModelChoice? = null
 
     val state: StateFlow<ChatUiState> = mutableState.asStateFlow()
     val actions: Flow<String> = mutableActions.receiveAsFlow()
+    val mouth: StateFlow<Pair<Float, Float>> = remoteTtsPlayer.mouth
+
+    init {
+        viewModelScope.launch {
+            companionClient.state.collect { connection ->
+                val current = mutableState.value
+                if (current.backendMode != ChatBackendMode.Desktop) return@collect
+                mutableState.value = if (connection == CompanionConnectionState.Disconnected || connection == CompanionConnectionState.Error) {
+                    current.copy(
+                        characterId = null,
+                        conversationId = null,
+                        conversationTitle = "",
+                        conversations = emptyList(),
+                        messages = emptyList(),
+                        streamingText = "",
+                        isGenerating = false,
+                        isThinking = false,
+                        companionConnection = connection,
+                        companionCapabilities = CompanionCapabilities(),
+                    )
+                } else {
+                    current.copy(companionConnection = connection)
+                }
+            }
+        }
+        viewModelScope.launch {
+            companionClient.events.collect { (event, data) ->
+                if (mutableState.value.backendMode == ChatBackendMode.Desktop) handleCompanionEvent(event, data)
+            }
+        }
+        viewModelScope.launch {
+            com.bandori.pet.companion.CompanionRuntimeStatus.forgetEvents.collect {
+                if (mutableState.value.backendMode == ChatBackendMode.Desktop) setBackendMode(ChatBackendMode.Local)
+            }
+        }
+        viewModelScope.launch {
+            com.bandori.pet.companion.CompanionRuntimeStatus.reconnectEvents.collect {
+                if (mutableState.value.backendMode == ChatBackendMode.Desktop) reconnectCompanion()
+            }
+        }
+        viewModelScope.launch {
+            com.bandori.pet.companion.CompanionRuntimeStatus.remoteEnabled.collect { enabled ->
+                val desired = if (enabled) ChatBackendMode.Desktop else ChatBackendMode.Local
+                if (mutableState.value.backendMode != desired) setBackendMode(desired)
+            }
+        }
+        if (CompanionSettings.remoteMode(application) && CompanionSettings.load(application) != null) {
+            setBackendMode(ChatBackendMode.Desktop)
+        }
+    }
+
+    fun setBackendMode(mode: ChatBackendMode) {
+        if (mutableState.value.backendMode == mode) return
+        transitionJob?.cancel()
+        companionHydrationJob?.cancel()
+        requestJob?.cancel()
+        remoteTtsPlayer.stop()
+        if (mode == ChatBackendMode.Desktop) {
+            CompanionSettings.setRemoteMode(getApplication(), true)
+            com.bandori.pet.companion.CompanionRuntimeStatus.remoteEnabled.value = true
+            mutableState.value = ChatUiState(
+                backendMode = mode,
+                companionConnection = CompanionConnectionState.Connecting,
+                isHistoryLoading = true,
+            )
+            companionClient.connect()
+        } else {
+            CompanionSettings.setRemoteMode(getApplication(), false)
+            com.bandori.pet.companion.CompanionRuntimeStatus.remoteEnabled.value = false
+            companionClient.disconnect()
+            mutableState.value = ChatUiState()
+            selectedLocalModel?.let { selectCharacter(it, force = true) }
+        }
+    }
+
+    fun reconnectCompanion() {
+        if (mutableState.value.backendMode == ChatBackendMode.Desktop) companionClient.connect(force = true)
+    }
 
     fun selectCharacter(model: ModelChoice, force: Boolean = false) {
+        selectedLocalModel = model
         val current = mutableState.value
+        if (current.backendMode == ChatBackendMode.Desktop) {
+            if (force) companionRequest("state.get")
+            return
+        }
         if (
             current.characterId == model.characterId &&
             (!force || current.isGenerating || current.isHistoryLoading)
@@ -73,6 +182,10 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun startNewConversation(characterId: String) {
+        if (mutableState.value.backendMode == ChatBackendMode.Desktop) {
+            companionRequest("chat.new", JSONObject().put("characterId", characterId))
+            return
+        }
         if (mutableState.value.characterId != characterId) return
         mutableState.value = mutableState.value.copy(isHistoryLoading = true, error = null)
         launchTransition {
@@ -87,6 +200,10 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun selectConversation(characterId: String, conversationId: String) {
+        if (mutableState.value.backendMode == ChatBackendMode.Desktop) {
+            companionRequest("chat.select", JSONObject().put("conversationId", conversationId))
+            return
+        }
         if (mutableState.value.characterId != characterId || mutableState.value.conversationId == conversationId) return
         mutableState.value = mutableState.value.copy(isHistoryLoading = true, error = null)
         launchTransition {
@@ -107,6 +224,10 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun deleteConversation(characterId: String, conversationId: String) {
+        if (mutableState.value.backendMode == ChatBackendMode.Desktop) {
+            companionRequest("history.delete_conversation", JSONObject().put("conversationId", conversationId))
+            return
+        }
         if (mutableState.value.characterId != characterId) return
         mutableState.value = mutableState.value.copy(isHistoryLoading = true, error = null)
         launchTransition {
@@ -139,6 +260,11 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     fun send(model: ModelChoice, input: String): Boolean {
         val text = input.trim()
         val current = mutableState.value
+        if (current.backendMode == ChatBackendMode.Desktop) {
+            if (text.isEmpty() || current.isGenerating || current.isHistoryLoading || !current.companionCapabilities.remoteChat) return false
+            companionRequest("chat.send", JSONObject().put("text", text))
+            return true
+        }
         if (
             text.isEmpty() ||
             requestJob?.isActive == true ||
@@ -150,6 +276,10 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun retry(model: ModelChoice) {
+        if (mutableState.value.backendMode == ChatBackendMode.Desktop) {
+            companionRequest("chat.retry")
+            return
+        }
         val failed = lastFailedRequest ?: return
         val current = mutableState.value
         if (
@@ -163,10 +293,30 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun stop() {
+        if (mutableState.value.backendMode == ChatBackendMode.Desktop) {
+            companionRequest("chat.stop")
+            remoteTtsPlayer.stop()
+            return
+        }
         requestJob?.cancel()
     }
 
+    fun replayTts(message: ChatMessage) {
+        val current = mutableState.value
+        if (
+            current.backendMode != ChatBackendMode.Desktop ||
+            !current.companionCapabilities.tts ||
+            message.role != "assistant"
+        ) return
+        val conversationId = current.conversationId ?: return
+        companionRequest(
+            "tts.replay",
+            JSONObject().put("conversationId", conversationId).put("messageId", message.id),
+        )
+    }
+
     fun clearAll() {
+        if (mutableState.value.backendMode == ChatBackendMode.Desktop) return
         mutableState.value = mutableState.value.copy(isHistoryLoading = true, error = null)
         launchTransition {
             stopRequestAndJoin()
@@ -179,6 +329,207 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             )
         }
     }
+
+    private fun companionRequest(method: String, params: JSONObject = JSONObject()) {
+        if (mutableState.value.backendMode != ChatBackendMode.Desktop) return
+        viewModelScope.launch {
+            mutableState.value = mutableState.value.copy(error = null)
+            runCatching { companionClient.request(method, params) }
+                .onSuccess { result ->
+                    if (result.has("mode")) applyCompanionState(result)
+                    else if (method == "state.get") applyCompanionState(result)
+                }
+                .onFailure { error ->
+                    mutableState.value = mutableState.value.copy(error = error.message ?: "COMPANION_REQUEST_FAILED")
+                }
+        }
+    }
+
+    private suspend fun handleCompanionEvent(event: String, data: JSONObject) {
+        when (event) {
+            "session.hello" -> {
+                val capabilities = data.optJSONObject("capabilities") ?: JSONObject()
+                mutableState.value = mutableState.value.copy(
+                    companionCapabilities = parseCapabilities(capabilities),
+                    companionConnection = if (data.optBoolean("profileAvailable", true)) {
+                        CompanionConnectionState.Connected
+                    } else {
+                        CompanionConnectionState.ProfileUnavailable
+                    },
+                )
+                data.optJSONObject("state")?.let {
+                    applyCompanionState(it)
+                    scheduleCompanionHydration()
+                }
+            }
+            "capabilities.changed" -> mutableState.value = mutableState.value.copy(
+                companionCapabilities = parseCapabilities(data),
+            )
+            "state.changed" -> {
+                applyCompanionState(data)
+                scheduleCompanionHydration()
+            }
+            "generation.delta" -> mutableState.value = mutableState.value.copy(
+                streamingText = data.optString("text"),
+                isGenerating = data.optBoolean("isGenerating"),
+                isThinking = false,
+            )
+            "action.play" -> if (
+                mutableState.value.companionCapabilities.actions &&
+                data.optString("characterId") == mutableState.value.characterId
+            ) {
+                data.optString("action").takeIf(String::isNotBlank)?.let { mutableActions.send(it) }
+            }
+            "tts.started" -> Unit
+            "tts.finished" -> Unit
+            "tts.error" -> Unit
+            "profile.changed" -> {
+                mutableState.value = ChatUiState(
+                    backendMode = ChatBackendMode.Desktop,
+                    companionConnection = CompanionConnectionState.ProfileUnavailable,
+                    companionMode = "profile_unavailable",
+                )
+            }
+        }
+    }
+
+    private fun applyCompanionState(payload: JSONObject) {
+        val current = mutableState.value
+        if (current.backendMode != ChatBackendMode.Desktop) return
+        val mode = payload.optString("mode", "private")
+        if (mode != "private") {
+            remoteTtsPlayer.stop()
+            mutableState.value = current.copy(
+                characterId = null,
+                conversationId = null,
+                conversationTitle = "",
+                conversations = parseConversationSummaries(payload.optJSONArray("conversations")),
+                messages = emptyList(),
+                streamingText = "",
+                isGenerating = payload.optBoolean("isGenerating"),
+                isThinking = false,
+                isHistoryLoading = false,
+                companionMode = mode,
+                error = null,
+            )
+            return
+        }
+        mutableState.value = current.copy(
+            characterId = payload.optNullableString("characterId"),
+            conversationId = payload.optNullableString("conversationId"),
+            conversationTitle = payload.optString("conversationTitle"),
+            conversations = parseConversationSummaries(payload.optJSONArray("conversations")),
+            messages = parseMessages(payload.optJSONArray("messages")),
+            streamingText = payload.optString("streamingText"),
+            isGenerating = payload.optBoolean("isGenerating"),
+            isThinking = payload.optBoolean("isThinking"),
+            isHistoryLoading = false,
+            companionMode = mode,
+            error = null,
+        )
+    }
+
+    private suspend fun hydrateCompanionPages() {
+        var current = mutableState.value
+        if (current.backendMode != ChatBackendMode.Desktop || current.companionMode == "profile_unavailable") return
+        if (current.conversations.size >= 50) {
+            val merged = current.conversations.toMutableList()
+            var offset = merged.size
+            var pageCount = 0
+            while (pageCount++ < 100) {
+                val page = try {
+                    companionClient.request("history.list", JSONObject().put("limit", 50).put("offset", offset))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    break
+                }
+                val items = parseConversationSummaries(page.optJSONArray("items"))
+                if (items.isEmpty()) break
+                merged += items.filterNot { item -> merged.any { it.id == item.id } }
+                val nextOffset = if (page.isNull("nextOffset")) -1 else page.optInt("nextOffset", -1)
+                if (nextOffset < 0) break
+                offset = nextOffset
+            }
+            current = mutableState.value
+            if (current.backendMode == ChatBackendMode.Desktop) {
+                mutableState.value = current.copy(conversations = merged)
+            }
+        }
+        current = mutableState.value
+        val conversationId = current.conversationId ?: return
+        if (current.messages.size < 100) return
+        val mergedMessages = current.messages.toMutableList()
+        var beforeId = mergedMessages.firstOrNull()?.id ?: return
+        var pageCount = 0
+        while (pageCount++ < 100) {
+            val page = try {
+                companionClient.request(
+                    "history.messages",
+                    JSONObject().put("conversationId", conversationId).put("limit", 100).put("beforeMessageId", beforeId),
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                break
+            }
+            val items = parseMessages(page.optJSONArray("items"))
+            if (items.isEmpty()) break
+            mergedMessages.addAll(0, items.filterNot { item -> mergedMessages.any { it.id == item.id } })
+            beforeId = items.first().id
+            if (items.size < 100) break
+        }
+        current = mutableState.value
+        if (current.backendMode == ChatBackendMode.Desktop && current.conversationId == conversationId) {
+            mutableState.value = current.copy(messages = mergedMessages)
+        }
+    }
+
+    private fun scheduleCompanionHydration() {
+        companionHydrationJob?.cancel()
+        companionHydrationJob = viewModelScope.launch { hydrateCompanionPages() }
+    }
+
+    private fun parseConversationSummaries(array: JSONArray?): List<ChatConversationSummary> = buildList {
+        if (array == null) return@buildList
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            add(ChatConversationSummary(
+                id = item.optString("id"),
+                characterId = item.optString("characterId"),
+                title = item.optString("title"),
+                preview = item.optString("preview"),
+                createdAt = item.optLong("createdAt"),
+                updatedAt = item.optLong("updatedAt"),
+                messageCount = item.optInt("messageCount"),
+            ))
+        }
+    }
+
+    private fun parseCapabilities(value: JSONObject): CompanionCapabilities = CompanionCapabilities(
+        privateHistory = value.optBoolean("privateHistory"),
+        remoteChat = value.optBoolean("remoteChat"),
+        tts = value.optBoolean("tts"),
+        actions = value.optBoolean("actions"),
+        llmStatus = value.optString("llmStatus", "unconfigured"),
+        ttsStatus = value.optString("ttsStatus", "unconfigured"),
+    )
+
+    private fun parseMessages(array: JSONArray?): List<ChatMessage> = buildList {
+        if (array == null) return@buildList
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            add(ChatMessage(
+                id = item.optString("id"),
+                role = item.optString("role", "user"),
+                content = item.optString("content"),
+                timestamp = item.optLong("timestamp"),
+            ))
+        }
+    }
+
+    private fun JSONObject.optNullableString(name: String): String? =
+        if (isNull(name)) null else optString(name).takeIf(String::isNotBlank)
 
     private fun startRequest(model: ModelChoice, input: String, appendUser: Boolean) {
         requestJob = viewModelScope.launch {

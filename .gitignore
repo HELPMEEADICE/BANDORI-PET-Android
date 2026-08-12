@@ -12,3 +12,19 @@ models/
 jniLibs/
 *.jks
 *.keystore
+
+# Companion credentials live in Android Keystore and are generated during pairing.
+# These rules cover accidental debug/manual exports without ignoring Kotlin sources
+# under app/src/main/java/com/bandori/pet/companion/.
+/companion/
+/companion-secrets/
+/companion-credentials*.json
+/companion-pairing*.json
+/app/src/debug/assets/companion-credentials*.json
+/app/src/debug/assets/companion-pairing*.json
+**/identity-key.pem
+**/identity-cert.pem
+*.key
+*.pem
+*.p12
+*.pfx

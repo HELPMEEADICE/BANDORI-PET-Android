@@ -119,6 +119,10 @@ class Live2DRenderView @JvmOverloads constructor(
         dispatchPendingAction()
     }
 
+    fun setLipSync(open: Float, form: Float) {
+        if (handle != 0L) NativeLive2D.setLipSync(handle, open.coerceIn(0f, 1f), form.coerceIn(-1f, 1f))
+    }
+
     fun setRenderOptions(fpsLimit: Int, vsyncEnabled: Boolean) {
         val nextFpsLimit = fpsLimit.coerceIn(15, 120)
         if (this.fpsLimit == nextFpsLimit && this.vsyncEnabled == vsyncEnabled) return

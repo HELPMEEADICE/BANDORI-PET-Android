@@ -9,13 +9,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.bandori.pet.data.ModelChoice
+import com.bandori.pet.data.DataRepository
 import com.bandori.pet.ui.live2d.Live2DScreen
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 class FullscreenLive2DActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,6 +30,8 @@ class FullscreenLive2DActivity : ComponentActivity() {
         setContent {
             val themeSettings = remember { ThemeSettings.load(appContext) }
             var selectedModel by remember { mutableStateOf<ModelChoice?>(null) }
+            val repository = remember { DataRepository(appContext) }
+            val scope = rememberCoroutineScope()
 
             LaunchedEffect(Unit) {
                 selectedModel = withContext(Dispatchers.IO) { loadPersistedModelChoice(appContext) }
@@ -40,6 +45,16 @@ class FullscreenLive2DActivity : ComponentActivity() {
                     selectedModel = selectedModel,
                     renderSettings = renderSettings,
                     fullScreen = true,
+                    onRemoteCharacterSelected = { characterId ->
+                        scope.launch {
+                            val remoteModel = withContext(Dispatchers.IO) {
+                                repository.load().characters[characterId]
+                                    ?.let(repository::availableModels)
+                                    ?.firstOrNull()
+                            }
+                            if (remoteModel != null) selectedModel = remoteModel
+                        }
+                    },
                     onFullScreenChanged = { fullScreen ->
                         if (!fullScreen) finish()
                     },

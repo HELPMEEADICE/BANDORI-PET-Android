@@ -75,6 +75,7 @@ import com.bandori.pet.isWallpaperEnabled
 import com.bandori.pet.llm.ChatHistoryRepository
 import com.bandori.pet.llm.LlmSettings
 import com.bandori.pet.llm.ThinkingMode
+import com.bandori.pet.companion.CompanionSettings
 import com.bandori.pet.loadWallpaperBackgroundUri
 import com.bandori.pet.persistBackgroundUri
 import com.bandori.pet.removeFloatingLive2DItem
@@ -142,6 +143,9 @@ fun SettingsScreen(
         item(key = "llm") {
             LlmSettingsEntryCard()
         }
+        item(key = "companion") {
+            CompanionSettingsEntryCard()
+        }
         item(key = "floating") {
             FloatingOverlaySettingsCard(
                 selectedModel = selectedModel,
@@ -173,6 +177,39 @@ fun SettingsScreen(
                 I18n.t("settings_about"),
                 I18n.t("settings_about_text"),
             )
+        }
+    }
+}
+
+@Composable
+private fun CompanionSettingsEntryCard() {
+    val context = LocalContext.current
+    val appContext = context.applicationContext
+    var desktopName by remember { mutableStateOf(CompanionSettings.load(appContext)?.name) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        desktopName = CompanionSettings.load(appContext)?.name
+    }
+    Card(
+        onClick = { launcher.launch(Intent(context, CompanionSettingsActivity::class.java)) },
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("桌面互联", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    desktopName?.let { "已配对：$it" } ?: "扫描桌面二维码，安全同步私聊与 TTS",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
         }
     }
 }
