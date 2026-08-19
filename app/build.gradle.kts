@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Sync
 
 plugins {
@@ -31,12 +32,6 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-
-        externalNativeBuild {
-            cmake {
-                cppFlags += listOf("-std=c++20", "-Wall", "-Wextra")
-            }
-        }
     }
 
     signingConfigs {
@@ -63,17 +58,14 @@ android {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
-    }
-
     val generatedAssetsDir = layout.buildDirectory.dir("generated/live2dAssets")
     val generatedResDir = layout.buildDirectory.dir("generated/iconRes")
+    val generatedRustJniDir = layout.buildDirectory.dir("generated/rustJniLibs")
 
     sourceSets["main"].assets.srcDir(generatedAssetsDir)
     sourceSets["main"].res.srcDir(generatedResDir)
+    sourceSets["debug"].jniLibs.srcDir(generatedRustJniDir.map { it.dir("debug") })
+    sourceSets["release"].jniLibs.srcDir(generatedRustJniDir.map { it.dir("release") })
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -97,6 +89,51 @@ android {
             )
         }
     }
+}
+
+val rustProjectDir = layout.projectDirectory.dir("src/main/rust")
+
+fun registerRustBuild(variant: String, release: Boolean) = tasks.register<Exec>(
+    "buildRust${variant.replaceFirstChar { it.uppercaseChar() }}",
+) {
+    group = "build"
+    description = "Builds the $variant Rust JNI library with cargo-ndk."
+    workingDir(rustProjectDir)
+
+    val outputDir = layout.buildDirectory.dir("generated/rustJniLibs/$variant")
+    val cargoTargetDir = layout.buildDirectory.dir("rust-target/$variant")
+    inputs.files(fileTree(rustProjectDir) {
+        include("Cargo.toml", "Cargo.lock", ".cargo/**", "src/**")
+    })
+    outputs.dir(outputDir)
+    environment("CARGO_TARGET_DIR", cargoTargetDir.get().asFile.absolutePath)
+
+    val cargoArguments = mutableListOf(
+        "cargo",
+        "ndk",
+        "-t",
+        "arm64-v8a",
+        "-p",
+        "26",
+        "-o",
+        outputDir.get().asFile.absolutePath,
+        "build",
+        "--manifest-path",
+        rustProjectDir.file("Cargo.toml").asFile.absolutePath,
+    )
+    if (release) cargoArguments += "--release"
+    commandLine(*cargoArguments.toTypedArray())
+}
+
+val buildRustDebug = registerRustBuild("debug", release = false)
+val buildRustRelease = registerRustBuild("release", release = true)
+
+tasks.named("preDebugBuild") {
+    dependsOn(buildRustDebug)
+}
+
+tasks.named("preReleaseBuild") {
+    dependsOn(buildRustRelease)
 }
 
 val syncLive2DAssets by tasks.registering(Sync::class) {

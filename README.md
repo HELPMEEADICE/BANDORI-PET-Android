@@ -8,6 +8,7 @@
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/HELPMEEADICE/BANDORI-PET-Android?color=yellow"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/BANDORI-PET-Android?color=orange"></a>
   <a href="https://kotlinlang.org/"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0+-7F52FF?logo=kotlin&logoColor=white"></a>
+  <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/Rust-1.85+-000000?logo=rust&logoColor=white"></a>
   <a href="https://luajit.org/"><img alt="LuaJIT" src="https://img.shields.io/badge/LuaJIT-2.1+-000080?logo=lua&logoColor=white"></a>
   <a href="https://github.com/EasyLive2D/Live2D-v2-Lua"><img alt="Live2D Runtime" src="https://img.shields.io/badge/Live2D-EasyLive2D_v2_Lua-EE82EE?logo=lua&logoColor=white"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/BANDORI-PET-Android?color=green"></a>
@@ -33,7 +34,9 @@ Bandori Pet 是一个 Android 桌面宠物 / 动态壁纸应用，使用 Live2D 
 |------|------------|
 | Android Studio | 2024+ 推荐（自带了 Gradle 和 SDK） |
 | Android SDK | compileSdk 35, minSdk 26 |
-| Android NDK | 27+（用于编译 C++ JNI 库和 LuaJIT） |
+| Android NDK | 27+（用于编译 Rust JNI 库和 LuaJIT） |
+| Rust | 1.85+ stable，需安装 `aarch64-linux-android` target |
+| cargo-ndk | 当前稳定版，由 Gradle 调用 |
 | JDK | 17 |
 | Gradle | 由项目 wrapper 管理，无需单独安装 |
 
@@ -49,9 +52,9 @@ Bandori-Pet-Android/
 │   ├── build.gradle.kts          # 应用构建配置
 │   └── src/main/
 │       ├── AndroidManifest.xml
-│       ├── cpp/
-│       │   ├── CMakeLists.txt    # CMake 原生构建
-│       │   └── live2d_jni.cpp   # JNI 层：EGL + LuaJIT + 渲染循环
+│       ├── rust/                 # Rust JNI：EGL + LuaJIT + 渲染循环
+│       │   ├── Cargo.toml
+│       │   └── src/
 │       ├── java/com/bandori/pet/ # Kotlin 源码
 │       └── res/                  # 资源文件
 ├── band.json                     # 乐队 & 角色定义
@@ -70,7 +73,16 @@ Bandori-Pet-Android/
 
 ## 获取 & 编译原生库
 
-核心思路：先准备好所有 .so 文件放到 `app/src/main/jniLibs/arm64-v8a/`，然后 Android Studio / Gradle 会自动打包到 APK 中。
+核心思路：手动准备第三方运行库，项目自身的 `libbandoripet.so` 由 Gradle 调用 Cargo 自动构建并打包。
+
+### 0. 安装 Rust Android 工具链
+
+```bash
+rustup target add aarch64-linux-android
+cargo install cargo-ndk
+```
+
+`cargo-ndk` 会自动查找 Android Studio 安装的 NDK。项目固定输出 `arm64-v8a`，并以 Android API 26 作为最低原生平台版本。
 
 ### 1. 编译 LuaJIT (libluajit.so)
 
@@ -121,9 +133,9 @@ rm -rf zstd-jni-1.5.6-9.aar zstd-aar-extract
 
 ### 3. libbandoripet.so（项目 JNI 库）
 
-这个由 CMake 在 Gradle 构建时自动编译，**无需手动操作**。只要 NDK 装好就行。
+这个由 Cargo 在 Gradle 构建时自动编译，**无需手动复制**。只要 Rust Android target、`cargo-ndk` 和 NDK 已安装即可。
 
-构建产物会自动输出到 `app/build/intermediates/cmake/` 并打包进 APK。
+Debug/Release 构建分别输出到 `app/build/generated/rustJniLibs/`，Cargo 中间产物保存在 `app/build/rust-target/`，两者都会随 `gradlew clean` 清理。
 
 ### 最终 jniLibs 目录长这样
 
@@ -131,7 +143,7 @@ rm -rf zstd-jni-1.5.6-9.aar zstd-aar-extract
 app/src/main/jniLibs/arm64-v8a/
 ├── libluajit.so                  # LuaJIT 运行时
 ├── libzstd-jni-1.5.6-9.so        # Zstd 解压
-└── (libbandoripet.so 由 CMake 自动生成)
+└── (libbandoripet.so 由 Cargo/Gradle 自动生成，不放在此目录)
 ```
 
 ---
@@ -196,10 +208,10 @@ Gradle sync 任务会自动将其复制到 APK assets 中（排除 `.git`、`ven
 2. 等待 Sync 完成（首次需下载依赖，喝杯茶等一等 🍵）
 3. Build → Make Project 或直接点 Run
 
-Gradle sync 时会自动：
+Gradle 构建时会自动：
 - 将 `band.json`、`outfit.json`、`band_logo/`、`models/`、`third_party/Live2D-v2-Lua/` 复制到生成 assets 目录
 - 将 `icon.png` 复制为应用图标
-- 然后触发 CMake 编译 `libbandoripet.so`
+- 然后通过 `cargo-ndk` 编译并打包 Rust `libbandoripet.so`
 
 ### 安装到设备
 
@@ -218,7 +230,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 - NDK 编译需要 Linux 交叉工具链，建议在 **WSL2** 或远程 Linux 上编译 LuaJIT
 - 编译好的 `libluajit.so` 拉回 Windows 放对应目录即可
-- Gradle CMake 编译用的 NDK 自带交叉编译器，这个在 Windows 上没问题
+- Gradle 调用 `cargo-ndk` 使用 NDK 交叉编译 Rust JNI 库，这个在 Windows 上没问题
 - `dlopen` / `dlsym` 等 POSIX API 由 Android NDK 提供，编译时不需要额外配置
 
 ---

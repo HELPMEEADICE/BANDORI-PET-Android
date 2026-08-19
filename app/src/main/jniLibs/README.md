@@ -1,5 +1,8 @@
 Place native runtime libraries here before building.
 
+Do not copy `libbandoripet.so` here. Gradle builds that library from
+`app/src/main/rust` with `cargo-ndk` and packages the generated output.
+
 Required per ABI, for example `app/src/main/jniLibs/arm64-v8a/`:
 
 - `libluajit.so`
