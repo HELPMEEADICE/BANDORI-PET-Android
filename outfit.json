@@ -2912,6 +2912,21 @@
         "school_summer": "school_summer",
         "school_winter-2023": "冬季校服2023"
       }
-    }
+    },
+    "arale": { "display": "仲町阿拉蕾" },
+    "nonoka": { "display": "宫永野乃花" },
+    "ritsu": { "display": "峰月律" },
+    "miyako": { "display": "藤都子" },
+    "yuno": { "display": "千石由乃" },
+    "hotaru": { "display": "汐见萤" },
+    "natsume": { "display": "伊泽枣" },
+    "nagi": { "display": "琴平凪" },
+    "mahoro": { "display": "滨崎茉幌" },
+    "houka": { "display": "和泉朋花" },
+    "raika": { "display": "须贺蕾叶" },
+    "miku": { "display": "马桥心玖" },
+    "yomogi": { "display": "矢仓蓬咲" },
+    "chieri": { "display": "梅里千樱梨" },
+    "shizuku": { "display": "四宫宁月" }
   }
 }
