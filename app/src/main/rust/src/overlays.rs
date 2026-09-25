@@ -41,7 +41,7 @@ void main() {
 "#;
 
 fn shader_log(shader: ffi::GLuint) -> String {
-    let mut log = [0_i8; 512];
+    let mut log = [0; 512];
     unsafe {
         ffi::glGetShaderInfoLog(
             shader,
@@ -56,7 +56,7 @@ fn shader_log(shader: ffi::GLuint) -> String {
 }
 
 fn program_log(program: ffi::GLuint) -> String {
-    let mut log = [0_i8; 512];
+    let mut log = [0; 512];
     unsafe {
         ffi::glGetProgramInfoLog(
             program,

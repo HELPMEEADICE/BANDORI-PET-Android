@@ -113,7 +113,7 @@ fun registerRustBuild(variant: String, release: Boolean) = tasks.register<Exec>(
         "ndk",
         "-t",
         "arm64-v8a",
-        "-p",
+        "-P",
         "26",
         "-o",
         outputDir.get().asFile.absolutePath,
@@ -128,12 +128,11 @@ fun registerRustBuild(variant: String, release: Boolean) = tasks.register<Exec>(
 val buildRustDebug = registerRustBuild("debug", release = false)
 val buildRustRelease = registerRustBuild("release", release = true)
 
-tasks.named("preDebugBuild") {
-    dependsOn(buildRustDebug)
-}
-
-tasks.named("preReleaseBuild") {
-    dependsOn(buildRustRelease)
+tasks.configureEach {
+    when (name) {
+        "preDebugBuild" -> dependsOn(buildRustDebug)
+        "preReleaseBuild" -> dependsOn(buildRustRelease)
+    }
 }
 
 val syncLive2DAssets by tasks.registering(Sync::class) {
