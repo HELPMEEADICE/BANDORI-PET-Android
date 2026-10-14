@@ -1,0 +1,109 @@
+name: Quality Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflows-and-assets:
+    name: Workflow and asset validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Validate JSON, XML, and app data references
+        run: python scripts/check_project_data.py
+
+      - name: Install actionlint
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash \
+            --output "$RUNNER_TEMP/download-actionlint.bash"
+          bash "$RUNNER_TEMP/download-actionlint.bash" 1.7.12 "$RUNNER_TEMP"
+
+      - name: Check GitHub Actions syntax and expressions
+        run: ${{ runner.temp }}/actionlint -color
+
+  kotlin:
+    name: Kotlin style and syntax
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install ktlint
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            https://github.com/ktlint/ktlint/releases/download/1.8.0/ktlint \
+            --output "$RUNNER_TEMP/ktlint"
+          chmod +x "$RUNNER_TEMP/ktlint"
+
+      - name: Check Kotlin source and Gradle Kotlin DSL formatting
+        run: ${{ runner.temp }}/ktlint --relative
+
+  rust:
+    name: Rust format and static analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path app/src/main/rust/Cargo.toml --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --manifest-path app/src/main/rust/Cargo.toml --locked -- -D warnings
+
+  gradle-configuration:
+    name: Gradle configuration
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK platform
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Validate Gradle Kotlin DSL configuration
+        run: ./gradlew --no-daemon help
