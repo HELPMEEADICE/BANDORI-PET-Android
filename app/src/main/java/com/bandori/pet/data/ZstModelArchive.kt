@@ -3,7 +3,6 @@ package com.bandori.pet.data
 import android.content.Context
 import com.bandori.pet.I18n
 import com.github.luben.zstd.ZstdInputStream
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.File
@@ -12,6 +11,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import org.json.JSONObject
 
 object ZstModelArchive {
     private const val INDEX_MEMBER = ".bandori_zst_index.json"
@@ -19,9 +19,7 @@ object ZstModelArchive {
     private const val VIRTUAL_ROOT = "archive://"
     private const val INDEX_CACHE_MAX_ENTRIES = 8
     private val indexCache = object : LinkedHashMap<String, Set<String>>(INDEX_CACHE_MAX_ENTRIES, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Set<String>>?): Boolean {
-            return size > INDEX_CACHE_MAX_ENTRIES
-        }
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Set<String>>?): Boolean = size > INDEX_CACHE_MAX_ENTRIES
     }
 
     fun assetExists(context: Context, logicalPath: String): Boolean = resolve(context, logicalPath) != null
@@ -75,7 +73,7 @@ object ZstModelArchive {
                                 downloadedBytes = downloadedBytes,
                                 totalBytes = totalBytes,
                                 bytesPerSecond = downloadedBytes / elapsedSeconds,
-                            )
+                            ),
                         )
                         lastReportAt = now
                     }
@@ -108,8 +106,7 @@ object ZstModelArchive {
         return target
     }
 
-    fun hasDownloadedCharacter(context: Context, characterId: String): Boolean =
-        downloadedArchiveFile(context, characterId).isFile
+    fun hasDownloadedCharacter(context: Context, characterId: String): Boolean = downloadedArchiveFile(context, characterId).isFile
 
     fun deleteDownloadedCharacter(context: Context, characterId: String): Boolean {
         val deleted = downloadedArchiveFile(context, characterId).delete()
@@ -242,8 +239,7 @@ object ZstModelArchive {
 
     private fun downloadedModelsDir(context: Context): File = File(context.filesDir, "models")
 
-    private fun downloadedArchiveFile(context: Context, characterId: String): File =
-        File(downloadedModelsDir(context), "${normalize(characterId).substringAfterLast('/')}.zst")
+    private fun downloadedArchiveFile(context: Context, characterId: String): File = File(downloadedModelsDir(context), "${normalize(characterId).substringAfterLast('/')}.zst")
 
     private fun downloadUrl(characterId: String): String {
         val encodedName = URLEncoder.encode(characterId, Charsets.UTF_8.name()).replace("+", "%20")

@@ -12,13 +12,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.DataRepository
+import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.ui.live2d.Live2DScreen
 import com.bandori.pet.ui.theme.BandoriPetTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class FullscreenLive2DActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

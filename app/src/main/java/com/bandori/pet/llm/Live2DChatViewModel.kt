@@ -165,7 +165,9 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         if (
             current.characterId == model.characterId &&
             (!force || current.isGenerating || current.isHistoryLoading)
-        ) return
+        ) {
+            return
+        }
         mutableState.value = if (current.characterId == model.characterId) {
             current.copy(isHistoryLoading = true, error = null)
         } else {
@@ -270,7 +272,9 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             requestJob?.isActive == true ||
             current.isHistoryLoading ||
             current.characterId != model.characterId
-        ) return false
+        ) {
+            return false
+        }
         startRequest(model, text, appendUser = true)
         return true
     }
@@ -288,7 +292,9 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             failed.characterId != model.characterId ||
             current.characterId != failed.characterId ||
             current.conversationId != failed.conversationId
-        ) return
+        ) {
+            return
+        }
         startRequest(model, failed.input, appendUser = false)
     }
 
@@ -307,7 +313,9 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             current.backendMode != ChatBackendMode.Desktop ||
             !current.companionCapabilities.tts ||
             message.role != "assistant"
-        ) return
+        ) {
+            return
+        }
         val conversationId = current.conversationId ?: return
         companionRequest(
             "tts.replay",
@@ -336,8 +344,11 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
             mutableState.value = mutableState.value.copy(error = null)
             runCatching { companionClient.request(method, params) }
                 .onSuccess { result ->
-                    if (result.has("mode")) applyCompanionState(result)
-                    else if (method == "state.get") applyCompanionState(result)
+                    if (result.has("mode")) {
+                        applyCompanionState(result)
+                    } else if (method == "state.get") {
+                        applyCompanionState(result)
+                    }
                 }
                 .onFailure { error ->
                     mutableState.value = mutableState.value.copy(error = error.message ?: "COMPANION_REQUEST_FAILED")
@@ -362,27 +373,35 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
                     scheduleCompanionHydration()
                 }
             }
+
             "capabilities.changed" -> mutableState.value = mutableState.value.copy(
                 companionCapabilities = parseCapabilities(data),
             )
+
             "state.changed" -> {
                 applyCompanionState(data)
                 scheduleCompanionHydration()
             }
+
             "generation.delta" -> mutableState.value = mutableState.value.copy(
                 streamingText = data.optString("text"),
                 isGenerating = data.optBoolean("isGenerating"),
                 isThinking = false,
             )
+
             "action.play" -> if (
                 mutableState.value.companionCapabilities.actions &&
                 data.optString("characterId") == mutableState.value.characterId
             ) {
                 data.optString("action").takeIf(String::isNotBlank)?.let { mutableActions.send(it) }
             }
+
             "tts.started" -> Unit
+
             "tts.finished" -> Unit
+
             "tts.error" -> Unit
+
             "profile.changed" -> {
                 mutableState.value = ChatUiState(
                     backendMode = ChatBackendMode.Desktop,
@@ -494,15 +513,17 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         if (array == null) return@buildList
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
-            add(ChatConversationSummary(
-                id = item.optString("id"),
-                characterId = item.optString("characterId"),
-                title = item.optString("title"),
-                preview = item.optString("preview"),
-                createdAt = item.optLong("createdAt"),
-                updatedAt = item.optLong("updatedAt"),
-                messageCount = item.optInt("messageCount"),
-            ))
+            add(
+                ChatConversationSummary(
+                    id = item.optString("id"),
+                    characterId = item.optString("characterId"),
+                    title = item.optString("title"),
+                    preview = item.optString("preview"),
+                    createdAt = item.optLong("createdAt"),
+                    updatedAt = item.optLong("updatedAt"),
+                    messageCount = item.optInt("messageCount"),
+                ),
+            )
         }
     }
 
@@ -519,17 +540,18 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
         if (array == null) return@buildList
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
-            add(ChatMessage(
-                id = item.optString("id"),
-                role = item.optString("role", "user"),
-                content = item.optString("content"),
-                timestamp = item.optLong("timestamp"),
-            ))
+            add(
+                ChatMessage(
+                    id = item.optString("id"),
+                    role = item.optString("role", "user"),
+                    content = item.optString("content"),
+                    timestamp = item.optLong("timestamp"),
+                ),
+            )
         }
     }
 
-    private fun JSONObject.optNullableString(name: String): String? =
-        if (isNull(name)) null else optString(name).takeIf(String::isNotBlank)
+    private fun JSONObject.optNullableString(name: String): String? = if (isNull(name)) null else optString(name).takeIf(String::isNotBlank)
 
     private fun startRequest(model: ModelChoice, input: String, appendUser: Boolean) {
         requestJob = viewModelScope.launch {
@@ -638,6 +660,7 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
                             pendingParserText.append(event.text)
                             publishStreamingText()
                         }
+
                         LlmStreamEvent.ReasoningStarted -> mutableState.value = mutableState.value.copy(isThinking = true)
                     }
                 }
@@ -786,9 +809,8 @@ class Live2DChatViewModel(application: Application) : AndroidViewModel(applicati
 }
 
 internal object ChatStateTransitions {
-    fun fromSnapshot(characterId: String, snapshot: ChatHistorySnapshot): ChatUiState =
-        snapshot.activeConversation?.let { fromConversation(it, snapshot.conversations) }
-            ?: newDraft(characterId, snapshot.conversations)
+    fun fromSnapshot(characterId: String, snapshot: ChatHistorySnapshot): ChatUiState = snapshot.activeConversation?.let { fromConversation(it, snapshot.conversations) }
+        ?: newDraft(characterId, snapshot.conversations)
 
     fun fromConversation(
         conversation: ChatConversation,
@@ -816,6 +838,5 @@ internal object ChatStateTransitions {
     ): ChatUiState = replacement?.let { fromConversation(it, conversations) }
         ?: newDraft(characterId, conversations)
 
-    fun matchesConversation(state: ChatUiState, characterId: String, conversationId: String): Boolean =
-        state.characterId == characterId && state.conversationId == conversationId
+    fun matchesConversation(state: ChatUiState, characterId: String, conversationId: String): Boolean = state.characterId == characterId && state.conversationId == conversationId
 }

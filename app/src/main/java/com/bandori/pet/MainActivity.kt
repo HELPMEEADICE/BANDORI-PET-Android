@@ -3,15 +3,15 @@ package com.bandori.pet
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,8 +41,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -56,11 +56,11 @@ import com.bandori.pet.ui.live2d.Live2DScreen
 import com.bandori.pet.ui.model.ModelScreen
 import com.bandori.pet.ui.settings.SettingsScreen
 import com.bandori.pet.ui.theme.BandoriPetTheme
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -172,7 +172,9 @@ fun BandoriPetApp(
         if (reloadGeneration != modelSelectionGeneration.get()) return@LaunchedEffect
         val activeCharacterId = when {
             data.characters.containsKey(selectedCharacterId) -> selectedCharacterId
+
             data.characters.containsKey("kasumi") -> "kasumi"
+
             else -> data.bands.firstOrNull()
                 ?.characters
                 ?.firstOrNull { it in data.characters }
@@ -192,7 +194,9 @@ fun BandoriPetApp(
         if (
             reloadGeneration != modelSelectionGeneration.get() ||
             selectedCharacterId != activeCharacterId
-        ) return@LaunchedEffect
+        ) {
+            return@LaunchedEffect
+        }
         val restoredModel = selectedModel?.takeIf { current ->
             current.characterId == activeCharacterId && models.any { it.modelAssetPath == current.modelAssetPath }
         }
@@ -248,10 +252,14 @@ fun BandoriPetApp(
                         targetState = selectedScreen,
                         transitionSpec = {
                             val direction = if (targetState.ordinal >= initialState.ordinal) 1 else -1
-                            (slideInHorizontally(animationSpec = tween(240)) { width -> direction * width / 12 } +
-                                fadeIn(animationSpec = tween(200))) togetherWith
-                                (slideOutHorizontally(animationSpec = tween(180)) { width -> -direction * width / 12 } +
-                                    fadeOut(animationSpec = tween(140)))
+                            (
+                                slideInHorizontally(animationSpec = tween(240)) { width -> direction * width / 12 } +
+                                    fadeIn(animationSpec = tween(200))
+                                ) togetherWith
+                                (
+                                    slideOutHorizontally(animationSpec = tween(180)) { width -> -direction * width / 12 } +
+                                        fadeOut(animationSpec = tween(140))
+                                    )
                         },
                         contentKey = { it },
                         label = "screen",
@@ -268,6 +276,7 @@ fun BandoriPetApp(
                                     }
                                 },
                             )
+
                             Screen.Model -> ModelScreen(
                                 data = data,
                                 selectedBandId = selectedBandId,
@@ -292,6 +301,7 @@ fun BandoriPetApp(
                                     DataRepository.invalidateCache()
                                 },
                             )
+
                             Screen.Settings -> SettingsScreen(
                                 selectedModel = selectedModel,
                                 themeSettings = themeSettings,

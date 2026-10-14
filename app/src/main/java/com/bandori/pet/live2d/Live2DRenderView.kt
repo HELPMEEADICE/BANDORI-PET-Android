@@ -29,7 +29,8 @@ data class Live2DTransform(
 class Live2DRenderView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-) : TextureView(context, attrs), TextureView.SurfaceTextureListener {
+) : TextureView(context, attrs),
+    TextureView.SurfaceTextureListener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var handle = 0L
     private var renderSurface: Surface? = null
@@ -285,12 +286,14 @@ class Live2DRenderView @JvmOverloads constructor(
                 pinching = false
                 moved = false
             }
+
             MotionEvent.ACTION_POINTER_DOWN -> {
                 if (event.pointerCount >= 2) {
                     lastSpan = pointerSpan(event)
                     pinching = true
                 }
             }
+
             MotionEvent.ACTION_MOVE -> {
                 if (pinching && event.pointerCount >= 2) {
                     val span = pointerSpan(event)
@@ -317,6 +320,7 @@ class Live2DRenderView @JvmOverloads constructor(
                     lastY = event.y
                 }
             }
+
             MotionEvent.ACTION_POINTER_UP -> {
                 if (event.pointerCount - 1 < 2) {
                     pinching = false
@@ -327,6 +331,7 @@ class Live2DRenderView @JvmOverloads constructor(
                     }
                 }
             }
+
             MotionEvent.ACTION_UP -> {
                 if (!moved && handle != 0L) {
                     sendTouch(event.x, event.y)
@@ -334,6 +339,7 @@ class Live2DRenderView @JvmOverloads constructor(
                 }
                 pinching = false
             }
+
             MotionEvent.ACTION_CANCEL -> pinching = false
         }
         return true

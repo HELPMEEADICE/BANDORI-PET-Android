@@ -39,10 +39,12 @@ class ActionTagParser(tags: Set<String>) {
                 }
                 pendingTag = null
             }
+
             character == '[' -> {
                 visible.append(pending)
                 pendingTag = StringBuilder("[")
             }
+
             character.isTagCharacter() -> {
                 pending.append(character)
                 val token = pending.substring(1).lowercase()
@@ -51,6 +53,7 @@ class ActionTagParser(tags: Set<String>) {
                     pendingTag = null
                 }
             }
+
             else -> {
                 visible.append(pending).append(character)
                 pendingTag = null
@@ -58,8 +61,7 @@ class ActionTagParser(tags: Set<String>) {
         }
     }
 
-    private fun Char.isTagCharacter(): Boolean =
-        this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' || this == '_' || this == '.'
+    private fun Char.isTagCharacter(): Boolean = this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' || this == '_' || this == '.'
 
     data class Result(val text: String, val action: String?)
 

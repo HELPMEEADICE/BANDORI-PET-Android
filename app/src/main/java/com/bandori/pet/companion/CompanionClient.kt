@@ -82,7 +82,10 @@ class CompanionClient private constructor(private val context: Context) {
                 CompanionConnectionState.Connecting,
                 CompanionConnectionState.Connected,
                 CompanionConnectionState.ProfileUnavailable,
-            )) return
+            )
+        ) {
+            return
+        }
         allowReconnect = true
         reconnectTask?.let(reconnectHandler::removeCallbacks)
         reconnectTask = null
@@ -161,8 +164,11 @@ class CompanionClient private constructor(private val context: Context) {
             val id = payload.optString("id")
             if (id.isNotBlank()) {
                 val deferred = pending.remove(id) ?: return
-                if (payload.optBoolean("ok")) deferred.complete(payload.optJSONObject("result") ?: JSONObject())
-                else deferred.completeExceptionally(IllegalStateException(payload.optJSONObject("error")?.optString("code") ?: "ERROR"))
+                if (payload.optBoolean("ok")) {
+                    deferred.complete(payload.optJSONObject("result") ?: JSONObject())
+                } else {
+                    deferred.completeExceptionally(IllegalStateException(payload.optJSONObject("error")?.optString("code") ?: "ERROR"))
+                }
                 return
             }
             val event = payload.optString("event")
@@ -250,18 +256,24 @@ class CompanionClient private constructor(private val context: Context) {
                             .put("v", 1)
                             .put("id", UUID.randomUUID().toString())
                             .put("method", "pair.request")
-                            .put("params", JSONObject()
-                                .put("token", payload.token)
-                                .put("deviceId", deviceId)
-                                .put("deviceName", deviceName)
-                                .put("credential", credential))
+                            .put(
+                                "params",
+                                JSONObject()
+                                    .put("token", payload.token)
+                                    .put("deviceId", deviceId)
+                                    .put("deviceName", deviceName)
+                                    .put("credential", credential),
+                            )
                         webSocket.send(request.toString())
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         val response = runCatching { JSONObject(text) }.getOrNull() ?: return
-                        if (response.optBoolean("ok")) completed.complete(Unit)
-                        else completed.completeExceptionally(IllegalStateException(response.optJSONObject("error")?.optString("code") ?: "PAIRING_FAILED"))
+                        if (response.optBoolean("ok")) {
+                            completed.complete(Unit)
+                        } else {
+                            completed.completeExceptionally(IllegalStateException(response.optJSONObject("error")?.optString("code") ?: "PAIRING_FAILED"))
+                        }
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

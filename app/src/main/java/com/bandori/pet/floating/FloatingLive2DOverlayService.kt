@@ -234,12 +234,14 @@ class FloatingLive2DOverlayService : Service() {
                     dragging = false
                     resizing = false
                 }
+
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     if (event.pointerCount >= 2) {
                         beginResize(event)
                         return true
                     }
                 }
+
                 MotionEvent.ACTION_MOVE -> {
                     if (resizing) return true
                     val dx = event.rawX - downRawX
@@ -259,6 +261,7 @@ class FloatingLive2DOverlayService : Service() {
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     if (event.pointerCount >= 2) beginResize(event)
                 }
+
                 MotionEvent.ACTION_MOVE -> {
                     if (resizing && event.pointerCount >= 2) {
                         resize(event)
@@ -266,12 +269,14 @@ class FloatingLive2DOverlayService : Service() {
                         drag(event)
                     }
                 }
+
                 MotionEvent.ACTION_POINTER_UP -> {
                     if (event.pointerCount - 1 < 2) {
                         resizing = false
                         beginDrag(event)
                     }
                 }
+
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     flushWindowUpdate()
                     if (dragging || resizing) saveBounds()
@@ -372,8 +377,7 @@ class FloatingLive2DOverlayService : Service() {
             Uri.parse("package:${context.packageName}"),
         )
 
-        fun canDrawOverlays(context: Context): Boolean =
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
+        fun canDrawOverlays(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
 
         @Suppress("DEPRECATION")
         private fun overlayWindowType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -389,7 +393,6 @@ class FloatingLive2DOverlayService : Service() {
             return flags
         }
 
-        private fun overlayWindowAlpha(touchThrough: Boolean): Float =
-            if (touchThrough && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 0.8f else 1f
+        private fun overlayWindowAlpha(touchThrough: Boolean): Float = if (touchThrough && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 0.8f else 1f
     }
 }

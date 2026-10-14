@@ -41,26 +41,31 @@ class CompanionDiscovery(context: Context) {
         override fun onServiceFound(serviceInfo: NsdServiceInfo) {
             if (!serviceInfo.serviceType.startsWith("_bandoripet._tcp")) return
             @Suppress("DEPRECATION")
-            manager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
-                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = Unit
-                override fun onServiceResolved(resolved: NsdServiceInfo) {
-                    val attributes = resolved.attributes
-                    fun property(name: String): String = attributes[name]
-                        ?.let { String(it, StandardCharsets.UTF_8) }
-                        .orEmpty()
-                    val item = DiscoveredDesktop(
-                        instanceId = property("instance"),
-                        name = property("name").ifBlank { resolved.serviceName },
-                        host = resolved.host?.hostAddress.orEmpty().substringBefore('%'),
-                        port = resolved.port,
-                        protocolVersion = property("v").toIntOrNull() ?: 0,
-                    )
-                    if (item.host.isBlank() || item.protocolVersion != 1) return
-                    mutableItems.value = (mutableItems.value.filterNot {
-                        it.instanceId.isNotBlank() && it.instanceId == item.instanceId
-                    } + item).sortedBy(DiscoveredDesktop::name)
-                }
-            })
+            manager.resolveService(
+                serviceInfo,
+                object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = Unit
+                    override fun onServiceResolved(resolved: NsdServiceInfo) {
+                        val attributes = resolved.attributes
+                        fun property(name: String): String = attributes[name]
+                            ?.let { String(it, StandardCharsets.UTF_8) }
+                            .orEmpty()
+                        val item = DiscoveredDesktop(
+                            instanceId = property("instance"),
+                            name = property("name").ifBlank { resolved.serviceName },
+                            host = resolved.host?.hostAddress.orEmpty().substringBefore('%'),
+                            port = resolved.port,
+                            protocolVersion = property("v").toIntOrNull() ?: 0,
+                        )
+                        if (item.host.isBlank() || item.protocolVersion != 1) return
+                        mutableItems.value = (
+                            mutableItems.value.filterNot {
+                                it.instanceId.isNotBlank() && it.instanceId == item.instanceId
+                            } + item
+                            ).sortedBy(DiscoveredDesktop::name)
+                    }
+                },
+            )
         }
     }
 

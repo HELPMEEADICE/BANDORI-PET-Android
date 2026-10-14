@@ -6,7 +6,6 @@ import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
-import com.bandori.pet.RenderSettings
 import com.bandori.pet.KEY_FPS_DISPLAY_ENABLED
 import com.bandori.pet.KEY_FPS_LIMIT
 import com.bandori.pet.KEY_RENDER_RESOLUTION
@@ -18,13 +17,15 @@ import com.bandori.pet.KEY_WALLPAPER_ENABLED
 import com.bandori.pet.KEY_WALLPAPER_OFFSET_X
 import com.bandori.pet.KEY_WALLPAPER_OFFSET_Y
 import com.bandori.pet.KEY_WALLPAPER_SCALE
+import com.bandori.pet.RenderSettings
 import com.bandori.pet.SETTINGS_PREFS
 import com.bandori.pet.isWallpaperEnabled
+import com.bandori.pet.live2d.AssetSync
+import com.bandori.pet.live2d.NativeLive2D
 import com.bandori.pet.loadPersistedModelChoice
 import com.bandori.pet.loadWallpaperBackgroundUri
 import com.bandori.pet.loadWallpaperTransform
-import com.bandori.pet.live2d.AssetSync
-import com.bandori.pet.live2d.NativeLive2D
+import kotlin.math.max
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,12 +35,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.max
 
 class Live2DWallpaperService : WallpaperService() {
     override fun onCreateEngine(): Engine = Live2DEngine()
 
-    private inner class Live2DEngine : Engine(), SurfaceHolder.Callback {
+    private inner class Live2DEngine :
+        Engine(),
+        SurfaceHolder.Callback {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private var handle = 0L
         private var runtimeRoot: String? = null
@@ -63,19 +65,25 @@ class Live2DWallpaperService : WallpaperService() {
                             )
                         }
                     }
+
                     KEY_RENDER_RESOLUTION -> {
                         if (handle != 0L) {
                             NativeLive2D.setRenderScale(handle, RenderSettings.load(applicationContext).renderResolution.scale)
                         }
                     }
+
                     KEY_FPS_LIMIT, KEY_VSYNC_ENABLED -> if (handle != 0L) {
                         val settings = RenderSettings.load(applicationContext)
                         NativeLive2D.setRenderOptions(handle, settings.fpsLimit, settings.vsyncEnabled)
                     }
+
                     KEY_WALLPAPER_OFFSET_X, KEY_WALLPAPER_OFFSET_Y, KEY_WALLPAPER_SCALE -> applyWallpaperTransform()
+
                     KEY_SELECTED_CHARACTER_ID,
                     KEY_SELECTED_MODEL_ASSET_PATH,
-                    KEY_WALLPAPER_BACKGROUND_URI -> scheduleRendererRestart()
+                    KEY_WALLPAPER_BACKGROUND_URI,
+                    -> scheduleRendererRestart()
+
                     KEY_WALLPAPER_ENABLED -> {
                         if (isWallpaperEnabled(applicationContext)) ensureRenderer() else stopRenderer()
                     }
@@ -170,7 +178,9 @@ class Live2DWallpaperService : WallpaperService() {
                         !visible ||
                         !surfaceReady ||
                         activeSurface?.isValid != true
-                    ) return@launch
+                    ) {
+                        return@launch
+                    }
 
                     val settings = RenderSettings.load(applicationContext)
                     if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
@@ -243,7 +253,6 @@ class Live2DWallpaperService : WallpaperService() {
                 runtimeRoot = null
             }
         }
-
     }
 
     private companion object {

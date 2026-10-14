@@ -1,8 +1,8 @@
 package com.bandori.pet
 
 import android.content.Context
-import org.json.JSONObject
 import java.util.Locale
+import org.json.JSONObject
 
 object I18n {
 
@@ -32,19 +32,17 @@ object I18n {
         }
     }
 
-    private fun loadFromAssets(context: Context, path: String): Boolean {
-        return runCatching {
-            context.assets.open(path).bufferedReader().use { reader ->
-                val json = JSONObject(reader.readText())
-                val keys = json.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    strings[key] = json.optString(key, key)
-                }
+    private fun loadFromAssets(context: Context, path: String): Boolean = runCatching {
+        context.assets.open(path).bufferedReader().use { reader ->
+            val json = JSONObject(reader.readText())
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                strings[key] = json.optString(key, key)
             }
-            true
-        }.getOrDefault(false)
-    }
+        }
+        true
+    }.getOrDefault(false)
 
     fun t(key: String, vararg args: Any?): String {
         val template = strings[key] ?: key

@@ -4,9 +4,9 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import java.nio.charset.StandardCharsets
 import java.net.URI
 import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.security.KeyStore
 import java.util.UUID
 import javax.crypto.Cipher
@@ -140,15 +140,13 @@ object CompanionSettings {
         CompanionRuntimeStatus.forgetEvents.tryEmit(Unit)
     }
 
-    fun remoteMode(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_REMOTE_MODE, false)
+    fun remoteMode(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_REMOTE_MODE, false)
 
     fun setRemoteMode(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_REMOTE_MODE, enabled).apply()
     }
 
-    fun ttsMuted(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_TTS_MUTED, false)
+    fun ttsMuted(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_TTS_MUTED, false)
 
     fun setTtsMuted(context: Context, muted: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_TTS_MUTED, muted).apply()

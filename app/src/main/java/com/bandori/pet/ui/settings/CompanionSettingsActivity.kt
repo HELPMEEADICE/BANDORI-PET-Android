@@ -1,13 +1,19 @@
 package com.bandori.pet.ui.settings
 
 import android.Manifest
-import android.os.Bundle
 import android.content.pm.PackageManager
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,8 +26,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -42,28 +48,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import com.bandori.pet.I18n
 import com.bandori.pet.ThemeSettings
 import com.bandori.pet.companion.CompanionClient
 import com.bandori.pet.companion.CompanionDiscovery
-import com.bandori.pet.companion.CompanionSettings
 import com.bandori.pet.companion.CompanionRuntimeStatus
+import com.bandori.pet.companion.CompanionSettings
 import com.bandori.pet.companion.PairingPayload
 import com.bandori.pet.companion.StoredDesktop
 import com.bandori.pet.resolveDarkTheme
 import com.bandori.pet.ui.theme.BandoriPetTheme
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -155,28 +155,30 @@ private fun CompanionSettingsScreen(initialPairingText: String, onBack: () -> Un
                     ) { Text("${desktop.name} · ${desktop.host}:${desktop.port}") }
                 }
             }
-            if (stored != null) StoredDesktopCard(
-                desktop = requireNotNull(stored),
-                host = manualHost,
-                onHostChanged = { manualHost = it },
-                onSaveHost = {
-                    CompanionSettings.updateHost(appContext, manualHost)
-                    stored = CompanionSettings.load(appContext)
-                    status = "连接地址已保存"
-                },
-                onReconnect = {
-                    CompanionSettings.setRemoteMode(appContext, true)
-                    CompanionRuntimeStatus.remoteEnabled.value = true
-                    CompanionRuntimeStatus.reconnectEvents.tryEmit(Unit)
-                    status = "已请求重新连接；聊天页会同步显示连接结果"
-                },
-                onForget = {
-                    CompanionSettings.forget(appContext)
-                    stored = null
-                    manualHost = ""
-                    status = "已忘记桌面设备"
-                },
-            ) else {
+            if (stored != null) {
+                StoredDesktopCard(
+                    desktop = requireNotNull(stored),
+                    host = manualHost,
+                    onHostChanged = { manualHost = it },
+                    onSaveHost = {
+                        CompanionSettings.updateHost(appContext, manualHost)
+                        stored = CompanionSettings.load(appContext)
+                        status = "连接地址已保存"
+                    },
+                    onReconnect = {
+                        CompanionSettings.setRemoteMode(appContext, true)
+                        CompanionRuntimeStatus.remoteEnabled.value = true
+                        CompanionRuntimeStatus.reconnectEvents.tryEmit(Unit)
+                        status = "已请求重新连接；聊天页会同步显示连接结果"
+                    },
+                    onForget = {
+                        CompanionSettings.forget(appContext)
+                        stored = null
+                        manualHost = ""
+                        status = "已忘记桌面设备"
+                    },
+                )
+            } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     FilledTonalButton(
                         onClick = {

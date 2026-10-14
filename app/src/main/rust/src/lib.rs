@@ -287,7 +287,7 @@ pub extern "system" fn Java_com_bandori_pet_live2d_NativeLive2D_setTransform(
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_bandori_pet_live2d_NativeLive2D_setBackgroundPixels(
-    mut env: JNIEnv<'_>,
+    env: JNIEnv<'_>,
     _this: JObject<'_>,
     handle: jlong,
     pixels: JIntArray<'_>,

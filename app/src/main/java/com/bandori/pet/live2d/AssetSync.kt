@@ -2,9 +2,9 @@ package com.bandori.pet.live2d
 
 import android.content.Context
 import com.bandori.pet.data.ZstModelArchive
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 object AssetSync {
     private val runtimeCopyLock = Any()

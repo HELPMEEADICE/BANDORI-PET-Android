@@ -113,8 +113,10 @@ class DataRepository(private val context: Context) {
         }
 
         val characterBase = "models/${character.id}"
-        val localCostumes = (runCatching { context.assets.list(characterBase).orEmpty().toList() }
-            .getOrDefault(emptyList()) + ZstModelArchive.listCostumes(context, character.id)).distinct().sorted()
+        val localCostumes = (
+            runCatching { context.assets.list(characterBase).orEmpty().toList() }
+                .getOrDefault(emptyList()) + ZstModelArchive.listCostumes(context, character.id)
+            ).distinct().sorted()
         for (costumeId in localCostumes) {
             if (!costumeChoices.containsKey(costumeId)) {
                 costumeChoices[costumeId] = costumeId

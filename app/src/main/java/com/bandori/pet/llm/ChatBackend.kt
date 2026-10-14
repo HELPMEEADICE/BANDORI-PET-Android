@@ -42,12 +42,15 @@ class DesktopCompanionBackend private constructor(context: Context, scope: Corou
                     is CompanionInboundFrame.Audio -> if (!CompanionRuntimeStatus.ttsMuted.value) {
                         ttsPlayer.accept(frame.bytes)
                     }
+
                     is CompanionInboundFrame.Event -> when (frame.name) {
                         "tts.started" -> ttsPlayer.configure(
                             frame.data.optInt("sampleRate", 24_000),
                             frame.data.optInt("channels", 1),
                         )
+
                         "tts.error", "tts.stopped", "profile.changed" -> ttsPlayer.stop()
+
                         else -> Unit
                     }
                 }
@@ -62,7 +65,10 @@ class DesktopCompanionBackend private constructor(context: Context, scope: Corou
                         CompanionConnectionState.Disconnected,
                         CompanionConnectionState.ProfileUnavailable,
                         CompanionConnectionState.Error,
-                    )) ttsPlayer.stop()
+                    )
+                ) {
+                    ttsPlayer.stop()
+                }
             }
         }
         scope.launch {

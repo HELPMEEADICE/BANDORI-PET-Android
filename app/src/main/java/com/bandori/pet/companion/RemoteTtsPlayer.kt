@@ -52,7 +52,9 @@ class RemoteTtsPlayer(private val scope: CoroutineScope) {
             !bytes.copyOfRange(0, 4).contentEquals(MAGIC) ||
             bytes[4].toInt() != 1 ||
             bytes[5].toInt() != 1
-        ) return
+        ) {
+            return
+        }
         val streamId = bytes.copyOfRange(6, 22)
         val sequence = ByteBuffer.wrap(bytes, 22, 4).order(ByteOrder.BIG_ENDIAN).int.toLong() and 0xffffffffL
         if (currentStreamId?.contentEquals(streamId) != true) {
@@ -78,7 +80,10 @@ class RemoteTtsPlayer(private val scope: CoroutineScope) {
 
     private fun play(chunk: AudioChunk) {
         if (chunk.generation != generation.get()) return
-        val audioTrack = track ?: createTrack().also { track = it; it.play() }
+        val audioTrack = track ?: createTrack().also {
+            track = it
+            it.play()
+        }
         val frameBytes = ((sampleRate * channels * 2) / 50).coerceAtLeast(channels * 2)
         var offset = 0
         while (offset < chunk.pcm.size && chunk.generation == generation.get()) {

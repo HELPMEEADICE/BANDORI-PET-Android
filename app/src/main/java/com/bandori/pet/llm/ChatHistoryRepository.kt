@@ -243,8 +243,7 @@ class ChatHistoryRepository internal constructor(
         return File(characterDirectory(characterId), "$conversationId.json")
     }
 
-    private fun safeCharacterId(characterId: String): String =
-        characterId.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+    private fun safeCharacterId(characterId: String): String = characterId.replace(Regex("[^A-Za-z0-9_.-]"), "_")
 
     companion object {
         const val MAX_STORED_MESSAGES = 100

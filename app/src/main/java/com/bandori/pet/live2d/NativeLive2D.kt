@@ -6,9 +6,9 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.Surface
 import com.bandori.pet.I18n
+import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.math.max
 
 object NativeLive2D {
     private const val MAX_BACKGROUND_EDGE = 2048

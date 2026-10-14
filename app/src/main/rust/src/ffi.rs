@@ -21,7 +21,6 @@ pub type GLsizei = c_int;
 pub type GLsizeiptr = isize;
 pub type GLuint = c_uint;
 
-pub const EGL_FALSE: EGLBoolean = 0;
 pub const EGL_TRUE: EGLBoolean = 1;
 pub const EGL_NONE: EGLint = 0x3038;
 pub const EGL_RED_SIZE: EGLint = 0x3024;

@@ -1,7 +1,6 @@
 package com.bandori.pet.ui.live2d
 
 import android.graphics.Rect
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
@@ -78,8 +77,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bandori.pet.I18n
-import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.companion.CompanionConnectionState
+import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.llm.ChatBackendMode
 import com.bandori.pet.llm.ChatConversationSummary
 import com.bandori.pet.llm.ChatMessage
@@ -348,7 +347,8 @@ private fun ChatPanelContent(
                         state.companionConnection != CompanionConnectionState.Connected ||
                             state.companionMode != "private" ||
                             !state.companionCapabilities.remoteChat
-                    )) {
+                        )
+                ) {
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -436,12 +436,11 @@ private fun ChatPanelContent(
     }
 }
 
-private fun companionCanSend(state: ChatUiState): Boolean =
-    state.backendMode == ChatBackendMode.Local || (
-        state.companionConnection == CompanionConnectionState.Connected &&
-            state.companionMode == "private" &&
-            state.companionCapabilities.remoteChat
-        )
+private fun companionCanSend(state: ChatUiState): Boolean = state.backendMode == ChatBackendMode.Local || (
+    state.companionConnection == CompanionConnectionState.Connected &&
+        state.companionMode == "private" &&
+        state.companionCapabilities.remoteChat
+    )
 
 private fun companionConnectionText(state: CompanionConnectionState): String = when (state) {
     CompanionConnectionState.Disconnected -> "已断开"
@@ -454,9 +453,13 @@ private fun companionConnectionText(state: CompanionConnectionState): String = w
 private fun companionUnavailableText(state: ChatUiState): String = when {
     state.companionConnection == CompanionConnectionState.ProfileUnavailable || state.companionMode == "profile_unavailable" ->
         "桌面已切换到其他用户档案，当前设备无权读取。"
+
     state.companionMode == "group_unavailable" -> "桌面正在使用不受支持的群聊。请选择一个私聊继续。"
+
     state.companionConnection != CompanionConnectionState.Connected -> "桌面连接已断开，远程消息已从手机内存清除。"
+
     !state.companionCapabilities.remoteChat -> "桌面 LLM 未配置或当前不可用；仍可查看已同步的私聊记录。"
+
     else -> "桌面互联当前不可用。"
 }
 
@@ -495,6 +498,7 @@ private fun ChatHistoryPanel(
             ) {
                 CircularProgressIndicator()
             }
+
             state.conversations.isEmpty() -> Box(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center,
@@ -504,6 +508,7 @@ private fun ChatHistoryPanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
             else -> LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -653,8 +658,7 @@ private fun ChatMessageList(
     }
 }
 
-internal fun shouldFollowNewChatContent(previousItemCount: Int, lastVisibleIndex: Int): Boolean =
-    previousItemCount <= 0 || lastVisibleIndex < 0 || lastVisibleIndex >= previousItemCount - 2
+internal fun shouldFollowNewChatContent(previousItemCount: Int, lastVisibleIndex: Int): Boolean = previousItemCount <= 0 || lastVisibleIndex < 0 || lastVisibleIndex >= previousItemCount - 2
 
 @Composable
 private fun ChatBubble(role: String, content: String, thinking: Boolean = false, onReplay: (() -> Unit)? = null) {

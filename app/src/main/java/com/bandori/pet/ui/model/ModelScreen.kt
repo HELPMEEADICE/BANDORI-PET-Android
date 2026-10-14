@@ -70,10 +70,10 @@ import com.bandori.pet.data.CharacterInfo
 import com.bandori.pet.data.DataRepository
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.data.ZstModelArchive
-import com.bandori.pet.ui.formatTransferProgress
-import com.bandori.pet.ui.formatTransferSpeed
 import com.bandori.pet.ui.ImageBitmapCache
 import com.bandori.pet.ui.SampledImageDecoder
+import com.bandori.pet.ui.formatTransferProgress
+import com.bandori.pet.ui.formatTransferSpeed
 import com.bandori.pet.ui.isMoc3
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers

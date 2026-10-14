@@ -45,8 +45,7 @@ enum class RenderResolution(val value: String, val scale: Float) {
     ;
 
     companion object {
-        fun fromValue(value: String?): RenderResolution =
-            entries.firstOrNull { it.value == value } ?: PointToPoint
+        fun fromValue(value: String?): RenderResolution = entries.firstOrNull { it.value == value } ?: PointToPoint
     }
 }
 
@@ -173,13 +172,11 @@ data class RenderSettings(
     }
 }
 
-fun loadSelectedCharacterId(context: Context): String =
-    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_SELECTED_CHARACTER_ID, "kasumi") ?: "kasumi"
+fun loadSelectedCharacterId(context: Context): String = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+    .getString(KEY_SELECTED_CHARACTER_ID, "kasumi") ?: "kasumi"
 
-fun loadSelectedModelAssetPath(context: Context): String? =
-    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_SELECTED_MODEL_ASSET_PATH, null)
+fun loadSelectedModelAssetPath(context: Context): String? = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+    .getString(KEY_SELECTED_MODEL_ASSET_PATH, null)
 
 fun saveModelSelection(context: Context, characterId: String, model: ModelChoice?) {
     context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
@@ -201,7 +198,9 @@ fun loadPersistedModelChoice(context: Context): ModelChoice? {
     val selectedCharacterId = loadSelectedCharacterId(context)
     val activeCharacterId = when {
         data.characters.containsKey(selectedCharacterId) -> selectedCharacterId
+
         data.characters.containsKey("kasumi") -> "kasumi"
+
         else -> data.bands.firstOrNull()
             ?.characters
             ?.firstOrNull { it in data.characters }
@@ -222,9 +221,8 @@ fun persistBackgroundUri(context: Context, uri: Uri) {
     }
 }
 
-fun isWallpaperEnabled(context: Context): Boolean =
-    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_WALLPAPER_ENABLED, false)
+fun isWallpaperEnabled(context: Context): Boolean = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+    .getBoolean(KEY_WALLPAPER_ENABLED, false)
 
 fun setWallpaperEnabled(context: Context, enabled: Boolean) {
     context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
@@ -280,9 +278,8 @@ fun saveFloatingLive2DItemBounds(context: Context, itemId: String, x: Int, y: In
     ).save(context)
 }
 
-fun loadWallpaperBackgroundUri(context: Context): String? =
-    context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_WALLPAPER_BACKGROUND_URI, null)
+fun loadWallpaperBackgroundUri(context: Context): String? = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+    .getString(KEY_WALLPAPER_BACKGROUND_URI, null)
 
 fun saveWallpaperBackgroundUri(context: Context, uri: String?) {
     context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)

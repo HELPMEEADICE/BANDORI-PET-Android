@@ -57,24 +57,22 @@ class ChatStateTransitionsTest {
         assertFalse(ChatStateTransitions.matchesConversation(state, "ran", "current"))
     }
 
-    private fun conversation(id: String, characterId: String, content: String): ChatConversation =
-        ChatConversation(
-            id = id,
-            characterId = characterId,
-            title = content,
-            createdAt = 1L,
-            updatedAt = 10L,
-            messages = listOf(ChatMessage("message-$id", "user", content, 10L)),
-        )
+    private fun conversation(id: String, characterId: String, content: String): ChatConversation = ChatConversation(
+        id = id,
+        characterId = characterId,
+        title = content,
+        createdAt = 1L,
+        updatedAt = 10L,
+        messages = listOf(ChatMessage("message-$id", "user", content, 10L)),
+    )
 
-    private fun summary(id: String, characterId: String, updatedAt: Long): ChatConversationSummary =
-        ChatConversationSummary(
-            id = id,
-            characterId = characterId,
-            title = id,
-            preview = id,
-            createdAt = updatedAt,
-            updatedAt = updatedAt,
-            messageCount = 1,
-        )
+    private fun summary(id: String, characterId: String, updatedAt: Long): ChatConversationSummary = ChatConversationSummary(
+        id = id,
+        characterId = characterId,
+        title = id,
+        preview = id,
+        createdAt = updatedAt,
+        updatedAt = updatedAt,
+        messageCount = 1,
+    )
 }

@@ -20,11 +20,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,9 +36,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -55,11 +56,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bandori.pet.DarkModeSetting
 import com.bandori.pet.FloatingLive2DItem
@@ -69,13 +69,13 @@ import com.bandori.pet.RenderResolution
 import com.bandori.pet.RenderSettings
 import com.bandori.pet.ThemeSettings
 import com.bandori.pet.addFloatingLive2DItem
+import com.bandori.pet.companion.CompanionSettings
 import com.bandori.pet.data.ModelChoice
 import com.bandori.pet.floating.FloatingLive2DOverlayService
 import com.bandori.pet.isWallpaperEnabled
 import com.bandori.pet.llm.ChatHistoryRepository
 import com.bandori.pet.llm.LlmSettings
 import com.bandori.pet.llm.ThinkingMode
-import com.bandori.pet.companion.CompanionSettings
 import com.bandori.pet.loadWallpaperBackgroundUri
 import com.bandori.pet.persistBackgroundUri
 import com.bandori.pet.removeFloatingLive2DItem
@@ -304,118 +304,133 @@ internal fun LlmSettingsScreen(onBack: () -> Unit) {
             item(key = "llm_form") {
                 SettingsSectionCard {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                OutlinedTextField(
-                    value = draft.baseUrl,
-                    onValueChange = { draft = draft.copy(baseUrl = it); saved = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(I18n.t("settings_llm_base_url")) },
-                    supportingText = { Text(I18n.t("settings_llm_http_warning")) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = draft.apiKey,
-                    onValueChange = { draft = draft.copy(apiKey = it); saved = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(I18n.t("settings_llm_api_key")) },
-                    visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
-                            Icon(
-                                if (apiKeyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                contentDescription = null,
-                            )
-                        }
-                    },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = draft.model,
-                    onValueChange = { draft = draft.copy(model = it); saved = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(I18n.t("settings_llm_model")) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = draft.customPrompt,
-                    onValueChange = { draft = draft.copy(customPrompt = it); saved = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(I18n.t("settings_llm_custom_prompt")) },
-                    supportingText = { Text(I18n.t("settings_llm_custom_prompt_desc")) },
-                    placeholder = { Text(I18n.t("settings_llm_custom_prompt_hint")) },
-                    minLines = 4,
-                    maxLines = 10,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(I18n.t("settings_llm_thinking"), fontWeight = FontWeight.SemiBold)
-                        Text(thinkingModeLabel(draft.thinkingMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Box {
-                        TextButton(onClick = { thinkingMenuExpanded = true }) { Text(thinkingModeLabel(draft.thinkingMode)) }
-                        DropdownMenu(
-                            expanded = thinkingMenuExpanded,
-                            onDismissRequest = { thinkingMenuExpanded = false },
+                        OutlinedTextField(
+                            value = draft.baseUrl,
+                            onValueChange = {
+                                draft = draft.copy(baseUrl = it)
+                                saved = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(I18n.t("settings_llm_base_url")) },
+                            supportingText = { Text(I18n.t("settings_llm_http_warning")) },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = draft.apiKey,
+                            onValueChange = {
+                                draft = draft.copy(apiKey = it)
+                                saved = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(I18n.t("settings_llm_api_key")) },
+                            visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
+                                    Icon(
+                                        if (apiKeyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = null,
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = draft.model,
+                            onValueChange = {
+                                draft = draft.copy(model = it)
+                                saved = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(I18n.t("settings_llm_model")) },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = draft.customPrompt,
+                            onValueChange = {
+                                draft = draft.copy(customPrompt = it)
+                                saved = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(I18n.t("settings_llm_custom_prompt")) },
+                            supportingText = { Text(I18n.t("settings_llm_custom_prompt_desc")) },
+                            placeholder = { Text(I18n.t("settings_llm_custom_prompt_hint")) },
+                            minLines = 4,
+                            maxLines = 10,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            ThinkingMode.entries.forEach { mode ->
-                                DropdownMenuItem(
-                                    text = { Text(thinkingModeLabel(mode)) },
-                                    onClick = {
-                                        draft = draft.copy(thinkingMode = mode)
-                                        saved = false
-                                        thinkingMenuExpanded = false
-                                    },
-                                )
+                            Column(Modifier.weight(1f)) {
+                                Text(I18n.t("settings_llm_thinking"), fontWeight = FontWeight.SemiBold)
+                                Text(thinkingModeLabel(draft.thinkingMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Box {
+                                TextButton(onClick = { thinkingMenuExpanded = true }) { Text(thinkingModeLabel(draft.thinkingMode)) }
+                                DropdownMenu(
+                                    expanded = thinkingMenuExpanded,
+                                    onDismissRequest = { thinkingMenuExpanded = false },
+                                ) {
+                                    ThinkingMode.entries.forEach { mode ->
+                                        DropdownMenuItem(
+                                            text = { Text(thinkingModeLabel(mode)) },
+                                            onClick = {
+                                                draft = draft.copy(thinkingMode = mode)
+                                                saved = false
+                                                thinkingMenuExpanded = false
+                                            },
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-                Column {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(I18n.t("settings_llm_temperature"), fontWeight = FontWeight.SemiBold)
-                        Text(String.format("%.1f", draft.temperature), color = MaterialTheme.colorScheme.primary)
-                    }
-                    Slider(
-                        value = draft.temperature,
-                        onValueChange = { draft = draft.copy(temperature = (it * 10).roundToInt() / 10f); saved = false },
-                        valueRange = 0f..2f,
-                        steps = 19,
-                    )
-                }
-                OutlinedTextField(
-                    value = maxTokensText,
-                    onValueChange = { value ->
-                        maxTokensText = value.filter(Char::isDigit).take(5)
-                        maxTokensText.toIntOrNull()?.takeIf { it in 1..32_768 }?.let { maxTokens ->
-                            draft = draft.copy(maxTokens = maxTokens)
+                        Column {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(I18n.t("settings_llm_temperature"), fontWeight = FontWeight.SemiBold)
+                                Text(String.format("%.1f", draft.temperature), color = MaterialTheme.colorScheme.primary)
+                            }
+                            Slider(
+                                value = draft.temperature,
+                                onValueChange = {
+                                    draft = draft.copy(temperature = (it * 10).roundToInt() / 10f)
+                                    saved = false
+                                },
+                                valueRange = 0f..2f,
+                                steps = 19,
+                            )
                         }
-                        saved = false
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(I18n.t("settings_llm_max_tokens")) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                )
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = draft.baseUrl.trim().let { it.startsWith("http://") || it.startsWith("https://") } &&
-                        draft.apiKey.isNotBlank() && draft.model.isNotBlank() &&
-                        maxTokensText.toIntOrNull()?.let { it in 1..32_768 } == true,
-                    onClick = {
-                        maxTokensText.toIntOrNull()?.let { maxTokens ->
-                            draft = draft.copy(maxTokens = maxTokens).normalized()
-                            maxTokensText = draft.maxTokens.toString()
-                            draft.save(appContext)
-                            saved = true
+                        OutlinedTextField(
+                            value = maxTokensText,
+                            onValueChange = { value ->
+                                maxTokensText = value.filter(Char::isDigit).take(5)
+                                maxTokensText.toIntOrNull()?.takeIf { it in 1..32_768 }?.let { maxTokens ->
+                                    draft = draft.copy(maxTokens = maxTokens)
+                                }
+                                saved = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(I18n.t("settings_llm_max_tokens")) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                        )
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = draft.baseUrl.trim().let { it.startsWith("http://") || it.startsWith("https://") } &&
+                                draft.apiKey.isNotBlank() && draft.model.isNotBlank() &&
+                                maxTokensText.toIntOrNull()?.let { it in 1..32_768 } == true,
+                            onClick = {
+                                maxTokensText.toIntOrNull()?.let { maxTokens ->
+                                    draft = draft.copy(maxTokens = maxTokens).normalized()
+                                    maxTokensText = draft.maxTokens.toString()
+                                    draft.save(appContext)
+                                    saved = true
+                                }
+                            },
+                        ) { Text(if (saved) I18n.t("settings_llm_saved") else I18n.t("settings_llm_save")) }
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = { confirmClearAll = true }) {
+                            Text(I18n.t("settings_llm_clear_all"))
                         }
-                    },
-                ) { Text(if (saved) I18n.t("settings_llm_saved") else I18n.t("settings_llm_save")) }
-                TextButton(modifier = Modifier.fillMaxWidth(), onClick = { confirmClearAll = true }) {
-                    Text(I18n.t("settings_llm_clear_all"))
-                }
                     }
                 }
             }

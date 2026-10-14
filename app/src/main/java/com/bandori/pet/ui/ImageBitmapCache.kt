@@ -11,11 +11,10 @@ import kotlin.math.max
 
 internal object ImageBitmapCache {
     private val cache = object : LruCache<String, ImageBitmap>(cacheSizeKb()) {
-        override fun sizeOf(key: String, value: ImageBitmap): Int =
-            ((value.width.toLong() * value.height.toLong() * 4L) / 1024L)
-                .coerceAtLeast(1L)
-                .coerceAtMost(Int.MAX_VALUE.toLong())
-                .toInt()
+        override fun sizeOf(key: String, value: ImageBitmap): Int = ((value.width.toLong() * value.height.toLong() * 4L) / 1024L)
+            .coerceAtLeast(1L)
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
     }
     private val missing = LruCache<String, Boolean>(MAX_MISSING_ENTRIES)
 
@@ -32,10 +31,9 @@ internal object ImageBitmapCache {
         if (cache.get(key) == null) missing.put(key, true)
     }
 
-    private fun cacheSizeKb(): Int =
-        (Runtime.getRuntime().maxMemory() / 1024L / 16L)
-            .coerceIn(8L * 1024L, 32L * 1024L)
-            .toInt()
+    private fun cacheSizeKb(): Int = (Runtime.getRuntime().maxMemory() / 1024L / 16L)
+        .coerceIn(8L * 1024L, 32L * 1024L)
+        .toInt()
 
     private const val MAX_MISSING_ENTRIES = 256
 }

@@ -102,9 +102,11 @@ fun registerRustBuild(variant: String, release: Boolean) = tasks.register<Exec>(
 
     val outputDir = layout.buildDirectory.dir("generated/rustJniLibs/$variant")
     val cargoTargetDir = layout.buildDirectory.dir("rust-target/$variant")
-    inputs.files(fileTree(rustProjectDir) {
-        include("Cargo.toml", "Cargo.lock", ".cargo/**", "src/**")
-    })
+    inputs.files(
+        fileTree(rustProjectDir) {
+            include("Cargo.toml", "Cargo.lock", ".cargo/**", "src/**")
+        },
+    )
     outputs.dir(outputDir)
     environment("CARGO_TARGET_DIR", cargoTargetDir.get().asFile.absolutePath)
 

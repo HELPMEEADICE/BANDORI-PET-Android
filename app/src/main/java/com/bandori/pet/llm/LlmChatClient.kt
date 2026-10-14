@@ -1,17 +1,17 @@
 package com.bandori.pet.llm
 
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.job
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 class LlmChatClient {
     @OptIn(kotlinx.coroutines.InternalCoroutinesApi::class)
@@ -80,6 +80,7 @@ class LlmChatClient {
                             }
                             event?.content?.takeIf(String::isNotEmpty)?.let { emit(LlmStreamEvent.Content(it)) }
                         }
+
                         line.startsWith("data:") -> dataLines += line.removePrefix("data:").trimStart()
                     }
                 }

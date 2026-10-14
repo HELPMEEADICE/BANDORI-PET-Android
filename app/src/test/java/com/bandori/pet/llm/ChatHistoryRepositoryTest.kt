@@ -110,23 +110,20 @@ class ChatHistoryRepositoryTest {
         assertTrue(repository.listConversations("kasumi").isEmpty())
     }
 
-    private fun conversation(id: String, characterId: String, updatedAt: Long, content: String): ChatConversation =
-        ChatConversation(
-            id = id,
-            characterId = characterId,
-            title = "",
-            createdAt = updatedAt,
-            updatedAt = updatedAt,
-            messages = listOf(message("$id-message", "user", content, updatedAt)),
-        )
+    private fun conversation(id: String, characterId: String, updatedAt: Long, content: String): ChatConversation = ChatConversation(
+        id = id,
+        characterId = characterId,
+        title = "",
+        createdAt = updatedAt,
+        updatedAt = updatedAt,
+        messages = listOf(message("$id-message", "user", content, updatedAt)),
+    )
 
-    private fun message(id: String, role: String, content: String, timestamp: Long): ChatMessage =
-        ChatMessage(id = id, role = role, content = content, timestamp = timestamp)
+    private fun message(id: String, role: String, content: String, timestamp: Long): ChatMessage = ChatMessage(id = id, role = role, content = content, timestamp = timestamp)
 
-    private fun messageJson(id: String, role: String, content: String, timestamp: Long): JSONObject =
-        JSONObject()
-            .put("id", id)
-            .put("role", role)
-            .put("content", content)
-            .put("timestamp", timestamp)
+    private fun messageJson(id: String, role: String, content: String, timestamp: Long): JSONObject = JSONObject()
+        .put("id", id)
+        .put("role", role)
+        .put("content", content)
+        .put("timestamp", timestamp)
 }
