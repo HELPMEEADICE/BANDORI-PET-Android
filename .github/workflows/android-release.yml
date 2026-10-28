@@ -50,31 +50,12 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version 4.1.2 --locked
 
-      - name: Prepare Live2D and native libraries
+      - name: Prepare Zstd native library
         shell: bash
         run: |
           set -euo pipefail
 
-          mkdir -p third_party app/src/main/jniLibs/arm64-v8a
-          git clone --depth 1 https://github.com/EasyLive2D/Live2D-v2-Lua.git \
-            third_party/Live2D-v2-Lua
-
-          git clone --depth 1 https://github.com/LuaJIT/LuaJIT.git "$RUNNER_TEMP/LuaJIT"
-          NDK="$ANDROID_HOME/ndk/27.2.12479018"
-          TOOL="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
-
-          make -C "$RUNNER_TEMP/LuaJIT" -j"$(nproc)" \
-            HOST_CC=gcc \
-            CROSS= \
-            CC="$TOOL/aarch64-linux-android23-clang" \
-            TARGET_AR="$TOOL/llvm-ar rcus" \
-            TARGET_STRIP="$TOOL/llvm-strip" \
-            TARGET_SYS=Linux \
-            XCFLAGS="-DLUAJIT_ENABLE_GC64" \
-            TARGET_SHLDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
-
-          cp "$RUNNER_TEMP/LuaJIT/src/libluajit.so" \
-            app/src/main/jniLibs/arm64-v8a/libluajit.so
+          mkdir -p app/src/main/jniLibs/arm64-v8a
 
           curl --fail --location --retry 3 \
             "https://repo1.maven.org/maven2/com/github/luben/zstd-jni/1.5.6-9/zstd-jni-1.5.6-9.aar" \

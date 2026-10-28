@@ -19,7 +19,6 @@ object NativeLive2D {
 
     external fun create(
         surface: Surface,
-        runtimeRoot: String,
         width: Int,
         height: Int,
         fpsLimit: Int,

@@ -120,6 +120,7 @@ fun registerRustBuild(variant: String, release: Boolean) = tasks.register<Exec>(
         "-o",
         outputDir.get().asFile.absolutePath,
         "build",
+        "--locked",
         "--manifest-path",
         rustProjectDir.file("Cargo.toml").asFile.absolutePath,
     )
@@ -146,17 +147,7 @@ val syncLive2DAssets by tasks.registering(Sync::class) {
     from(rootProject.file("lang")) { into("lang") }
     from(rootProject.file("prompt.json"))
     from(rootProject.file("characters")) { into("characters") }
-    from(rootProject.file("third_party/Live2D-v2-Lua")) {
-        into("third_party/Live2D-v2-Lua")
-        exclude("**/.git/**")
-        exclude("**/venv/**")
-        exclude("**/frames_output/**")
-        exclude("**/*.md")
-        exclude("**/*.png")
-        exclude("**/tests/**")
-        exclude("**/test-data/**")
-        exclude("**/resources/**")
-    }
+
 }
 
 val syncAppIcon by tasks.registering(Sync::class) {

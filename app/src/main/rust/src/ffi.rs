@@ -1,7 +1,10 @@
+#[cfg(target_os = "android")]
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_uint, c_void};
+#[cfg(target_os = "android")]
 use std::ptr;
 
+#[cfg(target_os = "android")]
 use jni::sys::{JNIEnv, jobject};
 
 pub enum ANativeWindow {}
@@ -61,11 +64,26 @@ pub const GL_VERTEX_SHADER: GLenum = 0x8B31;
 pub const GL_FRAGMENT_SHADER: GLenum = 0x8B30;
 pub const GL_COMPILE_STATUS: GLenum = 0x8B81;
 pub const GL_LINK_STATUS: GLenum = 0x8B82;
+pub const GL_ONE: GLenum = 1;
+pub const GL_ZERO: GLenum = 0;
+pub const GL_DST_COLOR: GLenum = 0x0306;
+pub const GL_ONE_MINUS_SRC_COLOR: GLenum = 0x0301;
+pub const GL_UNSIGNED_SHORT: GLenum = 0x1403;
+pub const GL_ELEMENT_ARRAY_BUFFER: GLenum = 0x8893;
+pub const GL_STATIC_DRAW: GLenum = 0x88E4;
+pub const GL_FRAMEBUFFER: GLenum = 0x8D40;
+pub const GL_COLOR_ATTACHMENT0: GLenum = 0x8CE0;
+pub const GL_FRAMEBUFFER_COMPLETE: GLenum = 0x8CD5;
+pub const GL_COLOR_BUFFER_BIT: GLenum = 0x4000;
+pub const GL_MAX_TEXTURE_SIZE: GLenum = 0x0D33;
+pub const GL_NO_ERROR: GLenum = 0;
+pub const GL_STENCIL_TEST: GLenum = 0x0B90;
 
 const ANDROID_LOG_ERROR: c_int = 6;
 const WINDOW_FORMAT_RGBA_8888: c_int = 1;
 
 #[link(name = "android")]
+#[cfg(target_os = "android")]
 unsafe extern "C" {
     fn ANativeWindow_fromSurface(env: *mut JNIEnv, surface: jobject) -> *mut ANativeWindow;
     fn ANativeWindow_release(window: *mut ANativeWindow);
@@ -78,6 +96,7 @@ unsafe extern "C" {
 }
 
 #[link(name = "log")]
+#[cfg(target_os = "android")]
 unsafe extern "C" {
     fn __android_log_write(priority: c_int, tag: *const c_char, text: *const c_char) -> c_int;
 }
@@ -122,6 +141,31 @@ unsafe extern "C" {
 
 #[link(name = "GLESv2")]
 unsafe extern "C" {
+    pub fn glViewport(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
+    pub fn glClearColor(red: GLfloat, green: GLfloat, blue: GLfloat, alpha: GLfloat);
+    pub fn glClear(mask: GLenum);
+    pub fn glGetIntegerv(parameter: GLenum, value: *mut GLint);
+    pub fn glGetError() -> GLenum;
+    pub fn glGenFramebuffers(count: GLsizei, buffers: *mut GLuint);
+    pub fn glDeleteFramebuffers(count: GLsizei, buffers: *const GLuint);
+    pub fn glBindFramebuffer(target: GLenum, buffer: GLuint);
+    pub fn glFramebufferTexture2D(
+        target: GLenum,
+        attachment: GLenum,
+        texture_target: GLenum,
+        texture: GLuint,
+        level: GLint,
+    );
+    pub fn glCheckFramebufferStatus(target: GLenum) -> GLenum;
+    pub fn glDrawElements(mode: GLenum, count: GLsizei, value_type: GLenum, indices: *const c_void);
+    pub fn glUniform1f(location: GLint, value: GLfloat);
+    pub fn glUniform3f(location: GLint, x: GLfloat, y: GLfloat, z: GLfloat);
+    pub fn glBlendFuncSeparate(
+        src_rgb: GLenum,
+        dst_rgb: GLenum,
+        src_alpha: GLenum,
+        dst_alpha: GLenum,
+    );
     pub fn glCreateShader(shader_type: GLenum) -> GLuint;
     pub fn glShaderSource(
         shader: GLuint,
@@ -191,13 +235,17 @@ unsafe extern "C" {
     pub fn glBlendFunc(source: GLenum, destination: GLenum);
 }
 
+#[cfg(target_os = "android")]
 pub struct NativeWindow(*mut ANativeWindow);
 
 // The Android NDK grants the native window its own reference. JNI callers may update its
 // buffer geometry while the render thread owns EGL; the last Arc releases it after shutdown.
+#[cfg(target_os = "android")]
 unsafe impl Send for NativeWindow {}
+#[cfg(target_os = "android")]
 unsafe impl Sync for NativeWindow {}
 
+#[cfg(target_os = "android")]
 impl NativeWindow {
     pub unsafe fn from_surface(env: *mut JNIEnv, surface: jobject) -> Result<Self, String> {
         let window = unsafe { ANativeWindow_fromSurface(env, surface) };
@@ -224,6 +272,7 @@ impl NativeWindow {
     }
 }
 
+#[cfg(target_os = "android")]
 impl Drop for NativeWindow {
     fn drop(&mut self) {
         if !self.0.is_null() {
@@ -233,6 +282,7 @@ impl Drop for NativeWindow {
     }
 }
 
+#[cfg(target_os = "android")]
 pub fn log_error(message: &str) {
     let tag = c"BandoriPet";
     let cleaned = message.replace('\0', "�");

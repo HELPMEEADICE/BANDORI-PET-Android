@@ -7,7 +7,9 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::ffi;
-use crate::lua::LuaRuntime;
+use crate::framing;
+use crate::gles::ModelRenderer;
+use crate::model::PetModel;
 use crate::overlays::{BackgroundRenderer, FpsRenderer};
 
 const GAZE_FOLLOW_EASING_PER_SECOND: f32 = 8.0;
@@ -50,7 +52,6 @@ struct ControlState {
     fps_limit: i32,
     vsync_enabled: bool,
     fps_display_enabled: bool,
-    pending_resize: bool,
     pending_render_options: bool,
     pending_model: Option<ModelRequest>,
     pending_action: Option<String>,
@@ -88,7 +89,6 @@ impl ControlState {
             fps_limit: if fps_limit > 0 { fps_limit } else { 60 },
             vsync_enabled,
             fps_display_enabled: false,
-            pending_resize: false,
             pending_render_options: false,
             pending_model: None,
             pending_action: None,
@@ -108,7 +108,6 @@ impl ControlState {
         let commands = FrameCommands {
             width: self.width,
             height: self.height,
-            should_resize: self.pending_resize,
             should_update_render_options: self.pending_render_options,
             vsync_enabled: self.vsync_enabled,
             fps_display_enabled: self.fps_display_enabled,
@@ -122,7 +121,6 @@ impl ControlState {
             mouth_open: self.mouth_open,
             mouth_form: self.mouth_form,
         };
-        self.pending_resize = false;
         self.pending_render_options = false;
         self.pending_look_at = false;
         self.pending_transform = false;
@@ -133,7 +131,6 @@ impl ControlState {
 struct FrameCommands {
     width: i32,
     height: i32,
-    should_resize: bool,
     should_update_render_options: bool,
     vsync_enabled: bool,
     fps_display_enabled: bool,
@@ -211,7 +208,6 @@ pub struct RendererHandle {
 impl RendererHandle {
     pub fn spawn(
         window: ffi::NativeWindow,
-        runtime_root: String,
         width: i32,
         height: i32,
         fps_limit: i32,
@@ -231,7 +227,7 @@ impl RendererHandle {
             .name("BandoriPet-Live2D".to_owned())
             .spawn(move || {
                 let result = catch_unwind(AssertUnwindSafe(|| {
-                    render_loop(&thread_shared, thread_window.as_ref(), &runtime_root)
+                    render_loop(&thread_shared, thread_window.as_ref())
                 }));
                 if let Err(panic) = result {
                     thread_shared
@@ -258,7 +254,6 @@ impl RendererHandle {
                 state.surface_height,
                 state.render_scale,
             );
-            state.pending_resize = true;
             (state.width, state.height)
         };
         self.window
@@ -292,7 +287,6 @@ impl RendererHandle {
                 state.surface_height,
                 state.render_scale,
             );
-            state.pending_resize = true;
             (state.width, state.height)
         };
         self.window
@@ -506,7 +500,7 @@ fn report_result(shared: &SharedState, result: Result<(), String>) {
     }
 }
 
-fn render_loop(shared: &Arc<SharedState>, window: &ffi::NativeWindow, runtime_root: &str) {
+fn render_loop(shared: &Arc<SharedState>, window: &ffi::NativeWindow) {
     let initial_vsync = lock_unpoisoned(&shared.control).vsync_enabled;
     let egl = match EglSession::create(window, initial_vsync) {
         Ok(egl) => egl,
@@ -515,75 +509,58 @@ fn render_loop(shared: &Arc<SharedState>, window: &ffi::NativeWindow, runtime_ro
             return;
         }
     };
-    let mut lua = match LuaRuntime::new(runtime_root) {
-        Ok(lua) => lua,
-        Err(error) => {
-            shared.set_error(error);
-            return;
-        }
-    };
+    // GL resources must be dropped before EGL releases the current context.
+    let mut model: Option<(PetModel, ModelRenderer)> = None;
     let mut background = BackgroundRenderer::default();
     let mut fps_renderer = FpsRenderer::default();
-
-    let monotonic_origin = Instant::now();
-    let mut previous_frame_start = monotonic_origin;
-    let mut fps_sample_start = monotonic_origin;
+    let mut transform = (0.0, 0.0, 1.0);
+    let mut previous_frame_start = Instant::now();
+    let mut fps_sample_start = previous_frame_start;
     let mut frames_since_sample = 0_i32;
     let mut measured_fps = 0_i32;
     let mut look_at_active = false;
     let mut smoothed_look_at = (0.5_f32, 0.5_f32);
 
     while let Some((commands, resumed)) = shared.next_frame() {
+        let frame_started = Instant::now();
         if resumed {
-            previous_frame_start = Instant::now();
-            fps_sample_start = previous_frame_start;
+            previous_frame_start = frame_started;
+            fps_sample_start = frame_started;
             frames_since_sample = 0;
             measured_fps = 0;
-            continue;
         }
-
-        let frame_started = Instant::now();
+        // Process commands taken on resume too; skipping them loses model loads.
         let delta_seconds = frame_started
             .duration_since(previous_frame_start)
             .as_secs_f32()
             .clamp(0.0, 0.1);
         previous_frame_start = frame_started;
-
         if commands.should_update_render_options {
             egl.set_vsync(commands.vsync_enabled);
         }
         if let Some(request) = commands.background {
             background.upload(&request.pixels, request.width, request.height);
         }
-        if commands.should_resize {
-            lua.get_global(c"__bp_resize");
-            lua.push_number(commands.width as f64);
-            lua.push_number(commands.height as f64);
-            report_result(shared, lua.call("__bp_resize", 2));
+        if let Some(value) = commands.transform {
+            transform = value;
         }
-        if let Some(model) = commands.model {
-            if !model.path.is_empty() {
-                lua.set_resources(model.resources);
-                look_at_active = false;
-                smoothed_look_at = (0.5, 0.5);
-                lua.get_global(c"__bp_load");
-                lua.push_bytes(model.path.as_bytes());
-                lua.push_number(commands.width as f64);
-                lua.push_number(commands.height as f64);
-                report_result(shared, lua.call("__bp_load", 3));
-            }
-        }
-        if let Some((x, y)) = commands.touch {
-            lua.get_global(c"__bp_touch");
-            lua.push_number(x as f64);
-            lua.push_number(y as f64);
-            report_result(shared, lua.call("__bp_touch", 2));
-        }
-        if let Some(action) = commands.action {
-            if !action.is_empty() {
-                lua.get_global(c"__bp_action");
-                lua.push_bytes(action.as_bytes());
-                report_result(shared, lua.call("__bp_action", 1));
+        if let Some(request) = commands.model {
+            if !request.path.is_empty() {
+                // Release the previous CPU/GPU model before decoding its replacement.
+                model = None;
+                let result =
+                    PetModel::load(&request.path, request.resources).and_then(|mut pet| {
+                        let gpu = ModelRenderer::new(pet.take_textures(), pet.meshes())?;
+                        Ok((pet, gpu))
+                    });
+                match result {
+                    Ok(loaded) => {
+                        model = Some(loaded);
+                        look_at_active = false;
+                        smoothed_look_at = (0.5, 0.5);
+                    }
+                    Err(error) => shared.set_error(format!("Neocari 加载模型失败: {error}")),
+                }
             }
         }
         if commands.should_look_at {
@@ -599,27 +576,38 @@ fn render_loop(shared: &Arc<SharedState>, window: &ffi::NativeWindow, runtime_ro
                 smoothed_look_at = commands.look_at;
                 look_at_active = false;
             }
-            lua.get_global(c"__bp_look_at");
-            lua.push_number(smoothed_look_at.0 as f64);
-            lua.push_number(smoothed_look_at.1 as f64);
-            report_result(shared, lua.call("__bp_look_at", 2));
         }
-        if let Some((offset_x, offset_y, scale)) = commands.transform {
-            lua.get_global(c"__bp_transform");
-            lua.push_number(offset_x as f64);
-            lua.push_number(offset_y as f64);
-            lua.push_number(scale as f64);
-            report_result(shared, lua.call("__bp_transform", 3));
+        unsafe {
+            ffi::glBindFramebuffer(ffi::GL_FRAMEBUFFER, 0);
+            ffi::glViewport(0, 0, commands.width, commands.height);
+            ffi::glClearColor(0.0, 0.0, 0.0, 0.0);
+            ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
         }
-
-        lua.get_global(c"__bp_clear");
-        report_result(shared, lua.call("__bp_clear", 0));
         report_result(shared, background.draw(commands.width, commands.height));
-        lua.get_global(c"__bp_draw");
-        lua.push_number(monotonic_origin.elapsed().as_millis() as f64);
-        lua.push_number(commands.mouth_open as f64);
-        lua.push_number(commands.mouth_form as f64);
-        report_result(shared, lua.call("__bp_draw", 3));
+        if let Some((pet, gpu)) = model.as_mut() {
+            let matrix = framing::transform(
+                pet.bounds(),
+                pet.flips_y(),
+                commands.width,
+                commands.height,
+                transform,
+            );
+            if let Some((x, y)) = commands.touch {
+                report_result(shared, pet.touch(x, y, framing::model_point(matrix, x, y)));
+            }
+            if let Some(action) = commands.action {
+                report_result(shared, pet.action(&action));
+            }
+            pet.look_at(smoothed_look_at.0, smoothed_look_at.1);
+            report_result(
+                shared,
+                pet.update(delta_seconds, (commands.mouth_open, commands.mouth_form)),
+            );
+            report_result(
+                shared,
+                gpu.draw(pet.meshes(), matrix, commands.width, commands.height),
+            );
+        }
         report_result(
             shared,
             fps_renderer.draw(
@@ -629,16 +617,16 @@ fn render_loop(shared: &Arc<SharedState>, window: &ffi::NativeWindow, runtime_ro
                 commands.height,
             ),
         );
-
-        if egl.swap_buffers() {
-            frames_since_sample += 1;
-            let elapsed = fps_sample_start.elapsed().as_secs_f32();
-            if elapsed >= 0.5 {
-                measured_fps =
-                    ((frames_since_sample as f32 / elapsed).round() as i32).clamp(0, 999);
-                frames_since_sample = 0;
-                fps_sample_start = Instant::now();
-            }
+        if !egl.swap_buffers() {
+            shared.set_error("EGL Surface 提交帧失败");
+            break;
+        }
+        frames_since_sample += 1;
+        let elapsed = fps_sample_start.elapsed().as_secs_f32();
+        if elapsed >= 0.5 {
+            measured_fps = ((frames_since_sample as f32 / elapsed).round() as i32).clamp(0, 999);
+            frames_since_sample = 0;
+            fps_sample_start = Instant::now();
         }
         shared.wait_for_frame(frame_started);
     }

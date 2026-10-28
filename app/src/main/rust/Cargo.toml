@@ -2,7 +2,7 @@
 name = "bandoripet-native"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 publish = false
 
 [lib]
@@ -11,7 +11,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jni = { version = "0.21.1", default-features = false }
-libloading = "0.8.8"
+neocari = { git = "https://github.com/HELPMEEADICE/Neocari", rev = "84b7b2eb3efdaa3c90189b5f38b233934933725f", default-features = false }
+image = { version = "0.25.9", default-features = false, features = ["png"] }
 
 [profile.release]
 opt-level = 3

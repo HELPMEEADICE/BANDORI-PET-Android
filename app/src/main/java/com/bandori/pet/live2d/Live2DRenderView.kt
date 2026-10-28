@@ -34,7 +34,6 @@ class Live2DRenderView @JvmOverloads constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var handle = 0L
     private var renderSurface: Surface? = null
-    private var runtimeRoot: String? = null
     private var selectedModel: ModelChoice? = null
     private var loadedModel: ModelChoice? = null
     private var loading = false
@@ -228,13 +227,11 @@ class Live2DRenderView @JvmOverloads constructor(
             val result = runCatching { AssetSync.prepareModel(context.applicationContext, model.modelAssetPath) }
             if (selectedModel == model && generation == loadGeneration && renderSurface == surface && surface.isValid) {
                 result.onSuccess { prepared ->
-                    if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
+                    if (handle == 0L) {
                         if (handle != 0L) NativeLive2D.destroy(handle)
                         loadedModel = null
-                        runtimeRoot = prepared.runtimeRoot
                         handle = NativeLive2D.create(
                             surface,
-                            prepared.runtimeRoot,
                             width.coerceAtLeast(1),
                             height.coerceAtLeast(1),
                             fpsLimit,

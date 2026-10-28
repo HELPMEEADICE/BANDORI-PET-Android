@@ -96,7 +96,7 @@ fn compile_shader(
     Ok(shader)
 }
 
-fn link_program(
+pub(crate) fn link_program(
     vertex_source: &str,
     fragment_source: &str,
     label: &str,

@@ -44,7 +44,6 @@ class Live2DWallpaperService : WallpaperService() {
         SurfaceHolder.Callback {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private var handle = 0L
-        private var runtimeRoot: String? = null
         private var surfaceReady = false
         private var visible = false
         private var loading = false
@@ -183,12 +182,10 @@ class Live2DWallpaperService : WallpaperService() {
                     }
 
                     val settings = RenderSettings.load(applicationContext)
-                    if (handle == 0L || runtimeRoot != prepared.runtimeRoot) {
+                    if (handle == 0L) {
                         destroyHandle()
-                        runtimeRoot = prepared.runtimeRoot
                         handle = NativeLive2D.create(
                             activeSurface,
-                            prepared.runtimeRoot,
                             width,
                             height,
                             settings.fpsLimit,
@@ -250,7 +247,6 @@ class Live2DWallpaperService : WallpaperService() {
             if (handle != 0L) {
                 NativeLive2D.destroy(handle)
                 handle = 0L
-                runtimeRoot = null
             }
         }
     }

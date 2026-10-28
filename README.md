@@ -8,13 +8,12 @@
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/HELPMEEADICE/BANDORI-PET-Android?color=yellow"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/BANDORI-PET-Android?color=orange"></a>
   <a href="https://kotlinlang.org/"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0+-7F52FF?logo=kotlin&logoColor=white"></a>
-  <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/Rust-1.85+-000000?logo=rust&logoColor=white"></a>
-  <a href="https://luajit.org/"><img alt="LuaJIT" src="https://img.shields.io/badge/LuaJIT-2.1+-000080?logo=lua&logoColor=white"></a>
-  <a href="https://github.com/EasyLive2D/Live2D-v2-Lua"><img alt="Live2D Runtime" src="https://img.shields.io/badge/Live2D-EasyLive2D_v2_Lua-EE82EE?logo=lua&logoColor=white"></a>
+  <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/Rust-1.88+-000000?logo=rust&logoColor=white"></a>
+  <a href="https://github.com/HELPMEEADICE/Neocari"><img alt="Live2D Runtime" src="https://img.shields.io/badge/Live2D-Neocari-EE82EE?logo=rust&logoColor=white"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/BANDORI-PET-Android?color=green"></a>
 </p>
 
-Bandori Pet 是一个 Android 桌面宠物 / 动态壁纸应用，使用 Live2D 模型驱动 BanG Dream! 系列角色的动态演出。基于 Compose + OpenGL ES 2.0 + LuaJIT 构建，支持 MOC2 和 MOC3 格式模型。
+Bandori Pet 是一个 Android 桌面宠物 / 动态壁纸应用，使用 Live2D 模型驱动 BanG Dream! 系列角色的动态演出。基于 Compose + Rust / Neocari + OpenGL ES 2.0 构建，支持 MOC2 和 MOC3 格式模型。
 
 ---
 
@@ -34,8 +33,8 @@ Bandori Pet 是一个 Android 桌面宠物 / 动态壁纸应用，使用 Live2D 
 |------|------------|
 | Android Studio | 2024+ 推荐（自带了 Gradle 和 SDK） |
 | Android SDK | compileSdk 35, minSdk 26 |
-| Android NDK | 27+（用于编译 Rust JNI 库和 LuaJIT） |
-| Rust | 1.85+ stable，需安装 `aarch64-linux-android` target |
+| Android NDK | 27+（用于编译 Rust JNI 库） |
+| Rust | 1.88+ stable，需安装 `aarch64-linux-android` target |
 | cargo-ndk | 当前稳定版，由 Gradle 调用 |
 | JDK | 17 |
 | Gradle | 由项目 wrapper 管理，无需单独安装 |
@@ -52,7 +51,7 @@ Bandori-Pet-Android/
 │   ├── build.gradle.kts          # 应用构建配置
 │   └── src/main/
 │       ├── AndroidManifest.xml
-│       ├── rust/                 # Rust JNI：EGL + LuaJIT + 渲染循环
+│       ├── rust/                 # Rust JNI：EGL + Neocari + GLES 渲染循环
 │       │   ├── Cargo.toml
 │       │   └── src/
 │       ├── java/com/bandori/pet/ # Kotlin 源码
@@ -62,18 +61,17 @@ Bandori-Pet-Android/
 ├── band_logo/                    # 乐队 Logo 图片
 ├── icon.png                      # 应用图标
 ├── docs/                         # 补充文档
-├── third_party/                  # [需自行提供] Live2D Lua 运行时
 ├── models/                       # [需自行提供] 角色模型文件
 └── jniLibs/                      # [需自行提供] 预编译 .so 文件
 ```
 
-`third_party/`、`models/`、`jniLibs/` 均被 `.gitignore` 排除，需要自行准备。
+`models/`、`jniLibs/` 均被 `.gitignore` 排除，需要自行准备。
 
 ---
 
 ## 获取 & 编译原生库
 
-核心思路：手动准备第三方运行库，项目自身的 `libbandoripet.so` 由 Gradle 调用 Cargo 自动构建并打包。
+Neocari 是固定 Git 提交的纯 Rust 依赖，随 `libbandoripet.so` 由 Gradle / Cargo 构建并打包。只需额外准备 Zstd 的 Android 原生库。
 
 ### 0. 安装 Rust Android 工具链
 
@@ -84,36 +82,7 @@ cargo install cargo-ndk
 
 `cargo-ndk` 会自动查找 Android Studio 安装的 NDK。项目固定输出 `arm64-v8a`，并以 Android API 26 作为最低原生平台版本。
 
-### 1. 编译 LuaJIT (libluajit.so)
-
-应用通过 `dlopen` 动态加载 LuaJIT，因此需要一个 Android arm64 版本的 `libluajit.so`。
-
-```bash
-# 克隆 LuaJIT
-git clone https://github.com/LuaJIT/LuaJIT.git
-cd LuaJIT
-
-# 设置 NDK 路径（按你的实际路径修改）
-NDK=$HOME/Android/sdk/ndk/27.0.12077973
-TOOL=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
-
-# 编译
-make clean
-make -j$(nproc) \
-  HOST_CC="gcc" \
-  CROSS="$TOOL/aarch64-linux-android23-" \
-  TARGET_SYS=Linux \
-  XCFLAGS="-DLUAJIT_ENABLE_GC64"
-
-# 复制产物
-cp src/libluajit.so <项目根目录>/app/src/main/jniLibs/arm64-v8a/libluajit.so
-```
-
-> **注意**：必须开启 `-DLUAJIT_ENABLE_GC64`，64 位 Android 设备上否则 `luaL_newstate()` 会返回 null。千万不要加 `-DLUAJIT_USE_SYSMALLOC`，会导致初始化失败。
-
-> **Windows 用户**：建议在 WSL2 或远程 Linux 机器上编译，然后把 .so 拉回 Windows。
-
-### 2. 获取 libzstd-jni.so
+### 1. 获取 libzstd-jni.so
 
 Kotlin 层的 Zstd 解压依赖 `com.github.luben:zstd-jni`，但其 JAR 不含 Android 原生库，需手动从 AAR 提取。
 
@@ -131,7 +100,7 @@ cp zstd-aar-extract/jni/arm64-v8a/libzstd-jni-1.5.6-9.so \
 rm -rf zstd-jni-1.5.6-9.aar zstd-aar-extract
 ```
 
-### 3. libbandoripet.so（项目 JNI 库）
+### 2. libbandoripet.so（项目 JNI 库）
 
 这个由 Cargo 在 Gradle 构建时自动编译，**无需手动复制**。只要 Rust Android target、`cargo-ndk` 和 NDK 已安装即可。
 
@@ -141,7 +110,6 @@ Debug/Release 构建分别输出到 `app/build/generated/rustJniLibs/`，Cargo �
 
 ```
 app/src/main/jniLibs/arm64-v8a/
-├── libluajit.so                  # LuaJIT 运行时
 ├── libzstd-jni-1.5.6-9.so        # Zstd 解压
 └── (libbandoripet.so 由 Cargo/Gradle 自动生成，不放在此目录)
 ```
@@ -150,13 +118,17 @@ app/src/main/jniLibs/arm64-v8a/
 
 ## 获取 Live2D 运行时 & 模型
 
-### Live2D Lua 运行时 (`third_party/Live2D-v2-Lua/`)
+### Neocari 运行时
 
-> **注意**：本项目**未使用 Live2D 官方 Cubism Core SDK**，而是基于社区维护的 [EasyLive2D/Live2D-v2-Lua](https://github.com/EasyLive2D/Live2D-v2-Lua) 开源 Lua 运行时。这是一个纯 Lua 实现的 Live2D 解析与渲染引擎，支持 MOC2 / MOC3 模型格式，无需依赖官方原生库。
+使用 [HELPMEEADICE/Neocari](https://github.com/HELPMEEADICE/Neocari) 的
+`84b7b2eb3efdaa3c90189b5f38b233934933725f` 提交，与 `BANDORI-PET-LITE` 对齐。
+首次构建由 Cargo 获取依赖；`Cargo.lock` 固定依赖版本，构建使用 `--locked`。
+无需提供 Lua 脚本、LuaJIT 动态库或官方 Cubism Core。
 
-该运行时负责模型解析和 OpenGL 绘制，需要放到项目根目录下的 `third_party/Live2D-v2-Lua/`。
-
-Gradle sync 任务会自动将其复制到 APK assets 中（排除 `.git`、`venv`、`*.md`、`*.png`、测试文件等）。
+Rust 适配层直接读取 `.zst` 的 `archive://` 内存资源，支持 MOC2 / MOC3 的动作、
+表情、物理、Pose、眨眼、呼吸、视线和口型。OpenGL ES 后端绘制 Neocari 网格，
+支持普通、叠加、乘算、滤色混合及柔和 / 反向裁剪遮罩；模型切换后释放旧模型和 GPU 资源。
+实现与验证范围见 [迁移说明](docs/neocari-renderer.md)。
 
 ### 模型文件 (`models/`)
 
@@ -209,7 +181,7 @@ Gradle sync 任务会自动将其复制到 APK assets 中（排除 `.git`、`ven
 3. Build → Make Project 或直接点 Run
 
 Gradle 构建时会自动：
-- 将 `band.json`、`outfit.json`、`band_logo/`、`models/`、`third_party/Live2D-v2-Lua/` 复制到生成 assets 目录
+- 将 `band.json`、`outfit.json`、`band_logo/`、`models/` 复制到生成 assets 目录
 - 将 `icon.png` 复制为应用图标
 - 然后通过 `cargo-ndk` 编译并打包 Rust `libbandoripet.so`
 
@@ -228,10 +200,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ### Windows 特别说明
 
-- NDK 编译需要 Linux 交叉工具链，建议在 **WSL2** 或远程 Linux 上编译 LuaJIT
-- 编译好的 `libluajit.so` 拉回 Windows 放对应目录即可
 - Gradle 调用 `cargo-ndk` 使用 NDK 交叉编译 Rust JNI 库，这个在 Windows 上没问题
-- `dlopen` / `dlsym` 等 POSIX API 由 Android NDK 提供，编译时不需要额外配置
+- GitHub Actions 在 Ubuntu 上完成 Rust 检查、Android ARMv8 构建与 Kotlin 单元测试。
 
 ---
 
@@ -243,9 +213,9 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## 致谢
 
-- [EasyLive2D/Live2D-v2-Lua](https://github.com/EasyLive2D/Live2D-v2-Lua) —— 社区 Live2D Lua 运行时（非官方 Core）
+- [Neocari](https://github.com/HELPMEEADICE/Neocari) —— 纯 Rust Live2D 运行时（非官方 Core）
+- [BANDORI-PET-LITE](https://github.com/HELPMEEADICE/BANDORI-PET-LITE) —— Neocari 适配和动画更新顺序参考
 - [Live2D Cubism](https://www.live2d.com/) —— 赋予角色灵魂的 Live2D 技术
-- [LuaJIT](https://luajit.org/) —— 极速 Lua 运行时
 - [BanG Dream!](https://bang-dream.com/) —— 闪闪发光心动不已！
 - 所有为 Bandori Live2D 模型整理做出贡献的社区成员
 
