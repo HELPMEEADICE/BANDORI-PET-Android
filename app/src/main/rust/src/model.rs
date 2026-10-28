@@ -138,9 +138,7 @@ impl PetModel {
             let bytes = resources.take(&resources.resolve(model.moc()))?;
             let meshes = Moc3ArtMeshes::parse(&bytes).map_err(message)?;
             let keyforms = Moc3ArtMeshKeyforms::parse(&bytes).map_err(message)?;
-            let deformers =
-                Moc3Deformers::parse_with_positions(&bytes, Some(keyforms.shared_position_xys()))
-                    .map_err(message)?;
+            let deformers = Moc3Deformers::parse(&bytes).map_err(message)?;
             let bindings = Moc3KeyformBindings::parse(&bytes).map_err(message)?;
             let ids = Moc3Ids::parse(&bytes).map_err(message)?;
             let offscreen = Moc3OffscreenInfo::parse(&bytes).map_err(message)?;

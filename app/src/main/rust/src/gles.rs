@@ -438,6 +438,7 @@ impl Drop for ModelRenderer {
 mod tests {
     use super::*;
     use neocari::moc3::Moc3DrawableVertex;
+    static EGL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[link(name = "EGL")]
     unsafe extern "C" {
@@ -600,6 +601,7 @@ mod tests {
 
     #[test]
     fn gles_pixels_cover_blends_order_soft_masks_inversion_and_resize() {
+        let _guard = EGL_TEST_LOCK.lock().unwrap();
         let _context = Context::new();
         // Premultiplied alpha output and all four Neocari blend modes.
         for (flags, blue, expected) in [
@@ -665,5 +667,80 @@ mod tests {
             .draw(&meshes, [1.0, 1.0, 0.0, 0.0], 64, 64)
             .unwrap();
         near(pixel(32, 32), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    #[ignore = "requires Neocari sample assets; exercised by GitHub Actions"]
+    fn moc3_archive_matches_filesystem_animation_and_renders_visible_pixels() {
+        use crate::{framing, model::PetModel};
+        use std::{collections::HashMap, path::Path};
+
+        fn collect(dir: &Path, root: &Path, files: &mut HashMap<String, Vec<u8>>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    collect(&path, root, files);
+                } else {
+                    let relative = path
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    files.insert(
+                        format!("archive://测试角色/服装/{relative}"),
+                        std::fs::read(path).unwrap(),
+                    );
+                }
+            }
+        }
+        let _guard = EGL_TEST_LOCK.lock().unwrap();
+        let _context = Context::new();
+        let path =
+            std::env::var("NEOCARI_TEST_MODEL").expect("CI must provide the pinned sample model");
+        let path = Path::new(&path);
+        let mut files = HashMap::new();
+        collect(path.parent().unwrap(), path.parent().unwrap(), &mut files);
+        let virtual_path = format!(
+            "archive://测试角色/服装/{}",
+            path.file_name().unwrap().to_string_lossy()
+        );
+        let mut archive = PetModel::load(&virtual_path, files).unwrap();
+        let mut disk = PetModel::load(path.to_str().unwrap(), HashMap::new()).unwrap();
+        assert_eq!(archive.meshes(), disk.meshes());
+        assert_eq!(archive.take_textures(), disk.take_textures());
+        // Reload for GPU upload; CPU pixels are transferred once.
+        let mut disk = PetModel::load(path.to_str().unwrap(), HashMap::new()).unwrap();
+        let mut renderer = ModelRenderer::new(disk.take_textures(), disk.meshes()).unwrap();
+        for frame in 0..90 {
+            if frame == 15 {
+                archive.action("[TapBody]").unwrap();
+                disk.action("[TapBody]").unwrap();
+            }
+            archive.look_at(0.7, 0.3);
+            disk.look_at(0.7, 0.3);
+            archive.update(1.0 / 60.0, (0.6, -0.2)).unwrap();
+            disk.update(1.0 / 60.0, (0.6, -0.2)).unwrap();
+            assert_eq!(
+                archive.meshes(),
+                disk.meshes(),
+                "archive playback diverged at frame {frame}"
+            );
+        }
+        let matrix = framing::transform(disk.bounds(), disk.flips_y(), 64, 64, (0.0, 0.0, 1.0));
+        clear(0.0);
+        renderer.draw(disk.meshes(), matrix, 64, 64).unwrap();
+        let mut rgba = vec![0_u8; 64 * 64 * 4];
+        unsafe {
+            glReadPixels(
+                0,
+                0,
+                64,
+                64,
+                ffi::GL_RGBA,
+                ffi::GL_UNSIGNED_BYTE,
+                rgba.as_mut_ptr().cast(),
+            );
+        }
+        assert!(rgba.chunks_exact(4).filter(|pixel| pixel[3] > 0).count() > 100);
     }
 }

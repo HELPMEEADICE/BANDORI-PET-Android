@@ -79,17 +79,12 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --manifest-path app/src/main/rust/Cargo.toml --all -- --check
 
-      # Temporary bootstrap for this migration; removed after retrieving the lockfile.
-      - name: Resolve Neocari lockfile remotely
-        if: github.event_name == 'workflow_dispatch'
-        run: cargo generate-lockfile --manifest-path app/src/main/rust/Cargo.toml
-
-      - name: Upload resolved lockfile
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v7
-        with:
-          name: rust-lockfile
-          path: app/src/main/rust/Cargo.lock
+      - name: Fetch pinned runtime and sample assets
+        run: |
+          cargo fetch --manifest-path app/src/main/rust/Cargo.toml --locked
+          MODEL="$(find "$HOME/.cargo/git/checkouts" -path '*/assets/models/Hiyori/Hiyori.model3.json' -print -quit)"
+          test -n "$MODEL"
+          echo "NEOCARI_TEST_MODEL=$MODEL" >> "$GITHUB_ENV"
 
       - name: Install Mesa for offscreen GLES regression tests
         run: sudo apt-get update && sudo apt-get install --yes libegl1-mesa-dev libgles2-mesa-dev
@@ -98,7 +93,7 @@ jobs:
         env:
           EGL_PLATFORM: surfaceless
           LIBGL_ALWAYS_SOFTWARE: "true"
-        run: cargo test --manifest-path app/src/main/rust/Cargo.toml --locked
+        run: cargo test --manifest-path app/src/main/rust/Cargo.toml --locked -- --include-ignored
 
       - name: Run Clippy
         run: cargo clippy --manifest-path app/src/main/rust/Cargo.toml --locked --all-targets -- -D warnings
@@ -111,13 +106,6 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
-
-      - name: Download resolved lockfile
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/download-artifact@v7
-        with:
-          name: rust-lockfile
-          path: app/src/main/rust
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6

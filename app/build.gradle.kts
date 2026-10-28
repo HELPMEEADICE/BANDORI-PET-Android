@@ -147,7 +147,6 @@ val syncLive2DAssets by tasks.registering(Sync::class) {
     from(rootProject.file("lang")) { into("lang") }
     from(rootProject.file("prompt.json"))
     from(rootProject.file("characters")) { into("characters") }
-
 }
 
 val syncAppIcon by tasks.registering(Sync::class) {
