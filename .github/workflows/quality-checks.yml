@@ -76,14 +76,17 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Update Neocari
+        run: cargo update --manifest-path app/src/main/rust/Cargo.toml --package neocari
+
       - name: Check Rust formatting
         run: cargo fmt --manifest-path app/src/main/rust/Cargo.toml --all -- --check
 
-      - name: Fetch pinned runtime and sample assets
+      - name: Fetch runtime and sample assets
         run: |
           cargo fetch --manifest-path app/src/main/rust/Cargo.toml --locked
-          MODEL="$(find "$HOME/.cargo/git/checkouts" -path '*/assets/models/Hiyori/Hiyori.model3.json' -print -quit)"
-          test -n "$MODEL"
+          MODEL="$(cargo metadata --manifest-path app/src/main/rust/Cargo.toml --locked --format-version 1 | python3 -c 'import json, pathlib, sys; packages = json.load(sys.stdin)["packages"]; print(pathlib.Path(next(p["manifest_path"] for p in packages if p["name"] == "neocari")).parent / "assets/models/Hiyori/Hiyori.model3.json")')"
+          test -f "$MODEL"
           echo "NEOCARI_TEST_MODEL=$MODEL" >> "$GITHUB_ENV"
 
       - name: Fetch pinned MOC2 model fixture
@@ -138,6 +141,9 @@ jobs:
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version 4.1.2 --locked
+
+      - name: Update Neocari
+        run: cargo update --manifest-path app/src/main/rust/Cargo.toml --package neocari
 
       - name: Check Android Rust code
         run: cargo clippy --manifest-path app/src/main/rust/Cargo.toml --target aarch64-linux-android --locked -- -D warnings

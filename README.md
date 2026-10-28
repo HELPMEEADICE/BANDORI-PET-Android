@@ -71,7 +71,7 @@ Bandori-Pet-Android/
 
 ## 获取 & 编译原生库
 
-Neocari 是固定 Git 提交的纯 Rust 依赖，随 `libbandoripet.so` 由 Gradle / Cargo 构建并打包。只需额外准备 Zstd 的 Android 原生库。
+Neocari 是跟随上游默认分支的纯 Rust 依赖，随 `libbandoripet.so` 由 Gradle / Cargo 构建并打包。只需额外准备 Zstd 的 Android 原生库。
 
 ### 0. 安装 Rust Android 工具链
 
@@ -120,9 +120,8 @@ app/src/main/jniLibs/arm64-v8a/
 
 ### Neocari 运行时
 
-使用 [HELPMEEADICE/Neocari](https://github.com/HELPMEEADICE/Neocari) 的
-`84b7b2eb3efdaa3c90189b5f38b233934933725f` 提交，与 `BANDORI-PET-LITE` 对齐。
-首次构建由 Cargo 获取依赖；`Cargo.lock` 固定依赖版本，构建使用 `--locked`。
+使用 [HELPMEEADICE/Neocari](https://github.com/HELPMEEADICE/Neocari) 默认分支的最新提交。
+每次 Gradle 原生构建和相关 CI 检查前都会更新 Neocari 的 `Cargo.lock` 记录，随后使用 `--locked` 构建；其他依赖仍由锁文件固定。直接运行 Cargo 时，先执行 `cargo update --manifest-path app/src/main/rust/Cargo.toml --package neocari`。
 无需提供 Lua 脚本、LuaJIT 动态库或官方 Cubism Core。
 
 Rust 适配层直接读取 `.zst` 的 `archive://` 内存资源，支持 MOC2 / MOC3 的动作、

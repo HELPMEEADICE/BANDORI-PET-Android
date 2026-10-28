@@ -1,7 +1,7 @@
 # Neocari Android 渲染层
 
-运行时固定为 `HELPMEEADICE/Neocari@84b7b2eb3efdaa3c90189b5f38b233934933725f`，
-与迁移时 `C:/oss/BANDORI-PET-LITE/vendor/neocari` 的提交一致。
+运行时跟随 `HELPMEEADICE/Neocari` 默认分支的最新提交。Gradle 原生构建和
+相关 CI 检查在执行前更新 Neocari 的锁文件记录，其他依赖仍由锁文件固定。
 Neocari 遵循 GPL-3.0-only，原始 Mocari 的 MIT 声明保留在上游仓库；
 本项目继续使用 GPLv3。
 
@@ -39,7 +39,7 @@ GitHub Actions 执行 Rust 格式检查、宿主端回归测试与 Clippy，
 Android 目标 Clippy、ARMv8 原生库 / Debug APK 构建和 Kotlin 单元测试。
 宿主回归覆盖资源解析、动作匹配与轮换、触摸区域、坐标和分辨率变换，
 并通过 Mesa EGL 的离屏 OpenGL ES 测试检查实际绘制与遮罩像素。
-真实 MOC3 / MOC2 模型分别采用固定 Neocari 提交内的 Hiyori 和固定原仓库提交内的
+真实 MOC3 / MOC2 模型分别采用当前 Neocari 版本内的 Hiyori 和固定原仓库提交内的
 Kasumi 数据（仅测试时下载模型文件，不获取或执行 Lua），比较内存和文件加载、
 动作 / 表情 / 口型更新的一致性。模型数据不随源码或 APK 分发。
 本次迁移不在本机运行 Cargo 或 Kotlin 编译。

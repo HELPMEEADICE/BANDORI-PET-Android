@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jni = { version = "0.21.1", default-features = false }
-neocari = { git = "https://github.com/HELPMEEADICE/Neocari", rev = "84b7b2eb3efdaa3c90189b5f38b233934933725f", default-features = false }
+neocari = { git = "https://github.com/HELPMEEADICE/Neocari", default-features = false }
 image = { version = "0.25.9", default-features = false, features = ["png"] }
 
 [profile.release]

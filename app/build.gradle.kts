@@ -93,10 +93,18 @@ android {
 
 val rustProjectDir = layout.projectDirectory.dir("src/main/rust")
 
+val updateNeocari by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Updates Neocari to the latest upstream default-branch commit."
+    workingDir(rustProjectDir)
+    commandLine("cargo", "update", "--manifest-path", "Cargo.toml", "--package", "neocari")
+}
+
 fun registerRustBuild(variant: String, release: Boolean) = tasks.register<Exec>(
     "buildRust${variant.replaceFirstChar { it.uppercaseChar() }}",
 ) {
     group = "build"
+    dependsOn(updateNeocari)
     description = "Builds the $variant Rust JNI library with cargo-ndk."
     workingDir(rustProjectDir)
 
