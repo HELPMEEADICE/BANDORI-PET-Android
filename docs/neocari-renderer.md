@@ -39,6 +39,9 @@ GitHub Actions 执行 Rust 格式检查、宿主端回归测试与 Clippy，
 Android 目标 Clippy、ARMv8 原生库 / Debug APK 构建和 Kotlin 单元测试。
 宿主回归覆盖资源解析、动作匹配与轮换、触摸区域、坐标和分辨率变换，
 并通过 Mesa EGL 的离屏 OpenGL ES 测试检查实际绘制与遮罩像素。
+真实 MOC3 / MOC2 模型分别采用固定 Neocari 提交内的 Hiyori 和固定原仓库提交内的
+Kasumi 数据（仅测试时下载模型文件，不获取或执行 Lua），比较内存和文件加载、
+动作 / 表情 / 口型更新的一致性。模型数据不随源码或 APK 分发。
 本次迁移不在本机运行 Cargo 或 Kotlin 编译。
 
 设备端仍需检查不同 GPU 上的模型显示、触摸与口型、悬浮层 / 壁纸切换、

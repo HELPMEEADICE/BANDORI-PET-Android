@@ -188,7 +188,7 @@ impl ModelRenderer {
     }
 
     fn ensure_mask(&mut self, width: i32, height: i32) -> Result<(), String> {
-        let limit = self.max_texture_size.min(2048).max(1) as f32;
+        let limit = self.max_texture_size.clamp(1, 2048) as f32;
         let scale = (limit / width.max(height) as f32).min(1.0);
         let size = (
             ((width as f32 * scale) as i32).max(1),
@@ -672,6 +672,16 @@ mod tests {
     #[test]
     #[ignore = "requires Neocari sample assets; exercised by GitHub Actions"]
     fn moc3_archive_matches_filesystem_animation_and_renders_visible_pixels() {
+        check_model("NEOCARI_TEST_MODEL", "TapBody", None);
+    }
+
+    #[test]
+    #[ignore = "requires pinned MOC2 model data; exercised by GitHub Actions"]
+    fn moc2_archive_matches_filesystem_motion_expression_and_lip_sync() {
+        check_model("NEOCARI_TEST_MODEL2", "smile", Some("angry01.exp"));
+    }
+
+    fn check_model(variable: &str, action: &str, expression: Option<&str>) {
         use crate::{framing, model::PetModel};
         use std::{collections::HashMap, path::Path};
 
@@ -695,8 +705,7 @@ mod tests {
         }
         let _guard = EGL_TEST_LOCK.lock().unwrap();
         let _context = Context::new();
-        let path =
-            std::env::var("NEOCARI_TEST_MODEL").expect("CI must provide the pinned sample model");
+        let path = std::env::var(variable).expect("CI must provide the pinned sample model");
         let path = Path::new(&path);
         let mut files = HashMap::new();
         collect(path.parent().unwrap(), path.parent().unwrap(), &mut files);
@@ -713,8 +722,14 @@ mod tests {
         let mut renderer = ModelRenderer::new(disk.take_textures(), disk.meshes()).unwrap();
         for frame in 0..90 {
             if frame == 15 {
-                archive.action("[TapBody]").unwrap();
-                disk.action("[TapBody]").unwrap();
+                archive.action(&format!("[{action}]")).unwrap();
+                disk.action(&format!("[{action}]")).unwrap();
+            }
+            if frame == 30 {
+                if let Some(expression) = expression {
+                    archive.action(expression).unwrap();
+                    disk.action(expression).unwrap();
+                }
             }
             archive.look_at(0.7, 0.3);
             disk.look_at(0.7, 0.3);
@@ -741,6 +756,13 @@ mod tests {
                 rgba.as_mut_ptr().cast(),
             );
         }
-        assert!(rgba.chunks_exact(4).filter(|pixel| pixel[3] > 0).count() > 100);
+        assert!(
+            rgba.as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|pixel| pixel[3] > 0)
+                .count()
+                > 100
+        );
     }
 }

@@ -34,7 +34,7 @@ impl Resources {
     pub fn new(model_path: &str, files: HashMap<String, Vec<u8>>) -> Self {
         let path = normalize_resource_path(model_path);
         Self {
-            directory: path.rsplit_once('/').map_or("", |(dir, _)| dir).to_owned(),
+            directory: path.rsplit_once('/').map_or(".", |(dir, _)| dir).to_owned(),
             files: files
                 .into_iter()
                 .map(|(path, bytes)| (normalize_resource_path(&path), bytes))

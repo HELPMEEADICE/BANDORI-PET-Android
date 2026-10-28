@@ -183,7 +183,6 @@ class Live2DWallpaperService : WallpaperService() {
 
                     val settings = RenderSettings.load(applicationContext)
                     if (handle == 0L) {
-                        destroyHandle()
                         handle = NativeLive2D.create(
                             activeSurface,
                             width,

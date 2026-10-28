@@ -86,6 +86,11 @@ jobs:
           test -n "$MODEL"
           echo "NEOCARI_TEST_MODEL=$MODEL" >> "$GITHUB_ENV"
 
+      - name: Fetch pinned MOC2 model fixture
+        run: |
+          python scripts/fetch_render_fixture.py "$RUNNER_TEMP/moc2-fixture"
+          echo "NEOCARI_TEST_MODEL2=$RUNNER_TEMP/moc2-fixture/kasumi2.model.json" >> "$GITHUB_ENV"
+
       - name: Install Mesa for offscreen GLES regression tests
         run: sudo apt-get update && sudo apt-get install --yes libegl1-mesa-dev libgles2-mesa-dev
 

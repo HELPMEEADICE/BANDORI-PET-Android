@@ -228,7 +228,6 @@ class Live2DRenderView @JvmOverloads constructor(
             if (selectedModel == model && generation == loadGeneration && renderSurface == surface && surface.isValid) {
                 result.onSuccess { prepared ->
                     if (handle == 0L) {
-                        if (handle != 0L) NativeLive2D.destroy(handle)
                         loadedModel = null
                         handle = NativeLive2D.create(
                             surface,
