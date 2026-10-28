@@ -15,8 +15,9 @@ neocari = { git = "https://github.com/HELPMEEADICE/Neocari", rev = "84b7b2eb3efd
 image = { version = "0.25.9", default-features = false, features = ["png"] }
 
 [profile.release]
-opt-level = 3
-lto = true
+opt-level = "s"
+lto = "fat"
 codegen-units = 1
+panic = "abort"
 strip = "symbols"
 
