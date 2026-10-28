@@ -1,10 +1,11 @@
 package com.bandori.pet.llm
 
-import com.sun.net.httpserver.HttpServer
-import java.net.InetSocketAddress
-import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,20 +46,19 @@ class LlmStreamingTest {
     }
 
     private suspend fun withServer(code: Int, response: ByteArray, block: suspend (String) -> Unit) {
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.executor = Executors.newSingleThreadExecutor()
-        server.createContext("/chat/completions") { exchange ->
-            exchange.requestBody.use { it.readBytes() }
-            exchange.responseHeaders.add("Content-Type", "text/event-stream")
-            exchange.sendResponseHeaders(code, response.size.toLong())
-            exchange.responseBody.use { it.write(response) }
-        }
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(code)
+                .setHeader("Content-Type", "text/event-stream")
+                .setBody(Buffer().write(response)),
+        )
         server.start()
         try {
-            block("http://127.0.0.1:${server.address.port}")
+            block(server.url("/").toString())
+            assertEquals("/chat/completions", server.takeRequest(5, TimeUnit.SECONDS)?.path)
         } finally {
-            server.stop(0)
-            (server.executor as? java.util.concurrent.ExecutorService)?.shutdownNow()
+            server.shutdown()
         }
     }
 }
