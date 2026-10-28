@@ -346,10 +346,10 @@ impl RendererHandle {
             state.running = false;
         }
         self.shared.wake.notify_all();
-        if let Some(thread) = lock_unpoisoned(&self.render_thread).take() {
-            if thread.thread().id() != thread::current().id() {
-                let _ = thread.join();
-            }
+        if let Some(thread) = lock_unpoisoned(&self.render_thread).take()
+            && thread.thread().id() != thread::current().id()
+        {
+            let _ = thread.join();
         }
     }
 }
@@ -544,23 +544,20 @@ fn render_loop(shared: &Arc<SharedState>, window: &ffi::NativeWindow) {
         if let Some(value) = commands.transform {
             transform = value;
         }
-        if let Some(request) = commands.model {
-            if !request.path.is_empty() {
-                // Release the previous CPU/GPU model before decoding its replacement.
-                model = None;
-                let result =
-                    PetModel::load(&request.path, request.resources).and_then(|mut pet| {
-                        let gpu = ModelRenderer::new(pet.take_textures(), pet.meshes())?;
-                        Ok((pet, gpu))
-                    });
-                match result {
-                    Ok(loaded) => {
-                        model = Some(loaded);
-                        look_at_active = false;
-                        smoothed_look_at = (0.5, 0.5);
-                    }
-                    Err(error) => shared.set_error(format!("Neocari 加载模型失败: {error}")),
+        if let Some(request) = commands.model.filter(|request| !request.path.is_empty()) {
+            // Release the previous CPU/GPU model before decoding its replacement.
+            model = None;
+            let result = PetModel::load(&request.path, request.resources).and_then(|mut pet| {
+                let gpu = ModelRenderer::new(pet.take_textures(), pet.meshes())?;
+                Ok((pet, gpu))
+            });
+            match result {
+                Ok(loaded) => {
+                    model = Some(loaded);
+                    look_at_active = false;
+                    smoothed_look_at = (0.5, 0.5);
                 }
+                Err(error) => shared.set_error(format!("Neocari 加载模型失败: {error}")),
             }
         }
         if commands.should_look_at {

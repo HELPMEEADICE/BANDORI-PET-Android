@@ -725,11 +725,11 @@ mod tests {
                 archive.action(&format!("[{action}]")).unwrap();
                 disk.action(&format!("[{action}]")).unwrap();
             }
-            if frame == 30 {
-                if let Some(expression) = expression {
-                    archive.action(expression).unwrap();
-                    disk.action(expression).unwrap();
-                }
+            if frame == 30
+                && let Some(expression) = expression
+            {
+                archive.action(expression).unwrap();
+                disk.action(expression).unwrap();
             }
             archive.look_at(0.7, 0.3);
             disk.look_at(0.7, 0.3);
