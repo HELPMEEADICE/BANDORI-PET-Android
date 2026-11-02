@@ -63,10 +63,10 @@ android {
     val generatedResDir = layout.buildDirectory.dir("generated/iconRes")
     val generatedRustJniDir = layout.buildDirectory.dir("generated/rustJniLibs")
 
-    sourceSets["main"].assets.srcDir(generatedAssetsDir)
-    sourceSets["main"].res.srcDir(generatedResDir)
-    sourceSets["debug"].jniLibs.srcDir(generatedRustJniDir.map { it.dir("debug") })
-    sourceSets["release"].jniLibs.srcDir(generatedRustJniDir.map { it.dir("release") })
+    sourceSets["main"].assets.srcDir(generatedAssetsDir.get().asFile)
+    sourceSets["main"].res.srcDir(generatedResDir.get().asFile)
+    sourceSets["debug"].jniLibs.srcDir(generatedRustJniDir.get().dir("debug").asFile)
+    sourceSets["release"].jniLibs.srcDir(generatedRustJniDir.get().dir("release").asFile)
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
