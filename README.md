@@ -7,7 +7,7 @@
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/HELPMEEADICE/BANDORI-PET-Android?color=blue"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/HELPMEEADICE/BANDORI-PET-Android?color=yellow"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/BANDORI-PET-Android?color=orange"></a>
-  <a href="https://kotlinlang.org/"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0+-7F52FF?logo=kotlin&logoColor=white"></a>
+  <a href="https://kotlinlang.org/"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.4.21-7F52FF?logo=kotlin&logoColor=white"></a>
   <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/Rust-1.88+-000000?logo=rust&logoColor=white"></a>
   <a href="https://github.com/HELPMEEADICE/Neocari"><img alt="Live2D Runtime" src="https://img.shields.io/badge/Live2D-Neocari-EE82EE?logo=rust&logoColor=white"></a>
   <a href="https://github.com/HELPMEEADICE/BANDORI-PET-Android"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/BANDORI-PET-Android?color=green"></a>
@@ -31,12 +31,12 @@ Bandori Pet 是一个 Android 桌面宠物 / 动态壁纸应用，使用 Live2D 
 
 | 工具 | 版本 / 说明 |
 |------|------------|
-| Android Studio | 2024+ 推荐（自带了 Gradle 和 SDK） |
-| Android SDK | compileSdk 35, minSdk 26 |
-| Android NDK | 27+（用于编译 Rust JNI 库） |
+| Android Studio | 支持 AGP 9.5 的最新版 |
+| Android SDK | compileSdk 36, targetSdk 35, minSdk 26；Build Tools 37.0.0 |
+| Android NDK | 30.0.16248370（用于编译 Rust JNI 库） |
 | Rust | 1.88+ stable，需安装 `aarch64-linux-android` target |
 | cargo-ndk | 当前稳定版，由 Gradle 调用 |
-| JDK | 17 |
+| JDK | 27（CI 使用；最低 17） |
 | Gradle | 由项目 wrapper 管理，无需单独安装 |
 
 > **注意**：本项目默认只构建 `arm64-v8a` 架构。模拟器请使用 arm64 镜像，真机没问题。

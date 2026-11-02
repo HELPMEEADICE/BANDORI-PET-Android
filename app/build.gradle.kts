@@ -3,7 +3,6 @@ import org.gradle.api.tasks.Sync
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -20,7 +19,9 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.bandori.pet"
-    compileSdk = 35
+    compileSdk = 36
+    buildToolsVersion = "37.0.0"
+    ndkVersion = "30.0.16248370"
 
     defaultConfig {
         applicationId = "com.bandori.pet"
@@ -70,9 +71,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     packaging {

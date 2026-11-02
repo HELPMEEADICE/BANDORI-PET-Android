@@ -24,7 +24,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Validate JSON, XML, and app data references
         run: python scripts/check_project_data.py
@@ -47,11 +47,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Set up JDK 17
+      - name: Set up JDK 27
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "27"
 
       - name: Install ktlint
         shell: bash
@@ -115,11 +115,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Set up JDK 17
+      - name: Set up JDK 27
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "27"
           cache: gradle
 
       - name: Validate Gradle Wrapper
@@ -130,8 +130,8 @@ jobs:
 
       - name: Install Android SDK and NDK
         run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          sdkmanager --install "platforms;android-36" "build-tools;37.0.0" "ndk;30.0.16248370"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
 
       - name: Set up Rust for Android
         uses: dtolnay/rust-toolchain@stable
