@@ -21,3 +21,8 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = 0
