@@ -58,7 +58,7 @@ jobs:
           mkdir -p app/src/main/jniLibs/arm64-v8a
 
           curl --fail --location --retry 3 \
-            "https://repo1.maven.org/maven2/com/github/luben/zstd-jni/1.5.6-9/zstd-jni-1.5.6-9.aar" \
+            "https://maven-central.storage-download.googleapis.com/maven2/com/github/luben/zstd-jni/1.5.6-9/zstd-jni-1.5.6-9.aar" \
             --output "$RUNNER_TEMP/zstd-jni-1.5.6-9.aar"
           unzip -p "$RUNNER_TEMP/zstd-jni-1.5.6-9.aar" \
             jni/arm64-v8a/libzstd-jni-1.5.6-9.so \
