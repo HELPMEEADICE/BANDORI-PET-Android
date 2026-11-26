@@ -206,7 +206,7 @@ dependencies = [
 [[package]]
 name = "neocari"
 version = "0.4.0"
-source = "git+https://github.com/HELPMEEADICE/Neocari#34629e46bb5fff0810b9059ea632ac95db49e860"
+source = "git+https://github.com/HELPMEEADICE/Neocari#38d2dce01c2f0e61160dc6be079b9a55f66f0bdc"
 dependencies = [
  "image",
  "png",
